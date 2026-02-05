@@ -3238,42 +3238,41 @@ function performSave() {
         return;
     }
 
-    // 2. SHOW LOADING SCREEN IMMEDIATELY
+    // 2. SHOW LOADING SCREEN (Curtain Up)
     document.getElementById('loading-overlay').style.display = 'flex';
 
     const storageId = 'code-' + type;
     const element = document.getElementById(storageId);
     
-    // Handle both Textarea and XMP storage methods
     let rawCode = element.tagName === 'TEXTAREA' || element.tagName === 'INPUT' 
                   ? element.value 
                   : element.textContent;
 
     if (!rawCode || rawCode.trim().length < 50) {
-        alert("Error: Code not found. Please paste the HTML content into the storage area first.");
-        document.getElementById('loading-overlay').style.display = 'none'; // Turn off spinner if error
+        alert("Error: Code not found.");
+        document.getElementById('loading-overlay').style.display = 'none';
         return;
     }
 
-    // === THE URL INJECTION FIX ===
     const urlRegex = /(const\s+(?:SCRIPT_URL|MANUAL_URL)\s*=\s*")([^"]+)(";)/g;
     const processedHtml = rawCode.replace(urlRegex, `$1${MASTER_SCRIPT_URL}$3`);
 
-    // Inject into the frame
     const frame = document.getElementById('app-frame');
+    
+    // === THE FIX IS HERE ===
+    // We turn the frame ON immediately so it starts rendering behind the curtain.
+    // Since z-index of loader is 100 and frame is 50, the user won't see it yet.
+    frame.style.display = 'block'; 
     frame.srcdoc = processedHtml;
     
-    // 3. THE DELAY (The Secret Sauce)
-    // Wait 1.5 seconds for Tailwind/Fonts to load inside the hidden frame
+    // 3. THE DELAY
+    // Now we wait while the frame renders in the background
     setTimeout(() => {
         // Hide the Home UI
         document.getElementById('home-ui').style.display = 'none';
         
-        // Hide the Loading Screen
+        // Lift the curtain (The app is now already fully painted underneath)
         document.getElementById('loading-overlay').style.display = 'none';
-        
-        // Reveal the App
-        frame.style.display = 'block';
         document.getElementById('home-btn').style.display = 'flex';
     }, 1500);
 }
@@ -3283,5 +3282,6 @@ function performSave() {
     </script>
 </body>
 </html>
+
 
 
