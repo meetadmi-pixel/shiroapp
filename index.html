@@ -4,12 +4,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>KSEF Online Judging App</title>
-	<link rel="icon" type="image/jpeg" href="https://i.postimg.cc/mgfGYYGq/download-34.jpg">
-	<meta property="og:title" content="KSEF 2026 - Official Portal">
-	<meta property="og:description" content="Access the Kenya Science & Engineering Fair participant registration, live judging, and results system.">
-	<meta property="og:image" content="https://i.postimg.cc/mgfGYYGq/download-34.jpg">
-	<meta property="og:url" content="https://ksefapp.com">
-	<meta property="og:type" content="website">
+    <link rel="icon" type="image/jpeg" href="https://i.postimg.cc/mgfGYYGq/download-34.jpg">
+    <meta property="og:title" content="KSEF 2026 - Official Portal">
+    <meta property="og:description" content="Access the Kenya Science & Engineering Fair participant registration, live judging, and results system.">
+    <meta property="og:image" content="https://i.postimg.cc/mgfGYYGq/download-34.jpg">
+    <meta property="og:url" content="https://ksefapp.com">
+    <meta property="og:type" content="website">
     <script src="https://cdn.tailwindcss.com/3.4.1"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/@phosphor-icons/web@2.1.2/src/regular/style.css" />
@@ -25,34 +25,34 @@
         #app-frame {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             border: none; z-index: 50; background: white;
-            display: none;
+            display: none; 
+            opacity: 0; 
+            transition: opacity 0.3s ease-in-out;
         }
-        #home-btn {
-            position: fixed; bottom: 20px; right: 20px; z-index: 60;
-            display: none;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+
+        #loading-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: #f8fafc;
+            z-index: 100;
+            display: none; 
+            flex-direction: column; align-items: center; justify-content: center;
+            transition: opacity 0.3s ease-out;
         }
-		/* ADD THIS TO YOUR CSS <style> BLOCK */
-#loading-overlay {
-    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-    background: white; z-index: 100;
-    display: none; /* Hidden by default */
-    flex-direction: column; align-items: center; justify-content: center;
-}
-.spinner {
-    width: 50px; height: 50px;
-    border: 4px solid #e2e8f0; border-top: 4px solid #3b82f6;
-    border-radius: 50%;
-    animation: spin 1s linear infinite;
-}
-@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .spinner {
+            width: 50px; height: 50px;
+            border: 4px solid #e2e8f0; border-top: 4px solid #3b82f6;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        
         /* OFFLINE SCREEN STYLES */
         #offline-screen {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background: rgba(255, 255, 255, 0.95);
             backdrop-filter: blur(10px);
-            z-index: 9999; /* Highest priority */
-            display: none; /* Hidden by default */
+            z-index: 9999; 
+            display: none;
             flex-direction: column;
             align-items: center;
             justify-content: center;
@@ -71,11 +71,13 @@
     </style>
 </head>
 <body class="min-h-screen flex flex-col">
-	<div id="loading-overlay">
-    <div class="spinner mb-4"></div>
-    <h3 class="text-slate-900 font-bold text-lg">Connecting to KSEF...</h3>
-    <p class="text-slate-500 text-sm">Please wait</p>
-</div>
+    
+    <div id="loading-overlay">
+        <div class="spinner mb-4"></div>
+        <h3 class="text-slate-900 font-bold text-lg">Loading App...</h3>
+        <p class="text-slate-500 text-sm">Please wait</p>
+    </div>
+
     <div id="offline-screen">
         <div class="rounded-full bg-red-100 p-8 mb-6 pulse-ring">
             <i class="ph ph-wifi-slash text-6xl text-red-600"></i>
@@ -123,10 +125,7 @@
     </div>
 
     <iframe id="app-frame"></iframe>
-    <button id="home-btn" onclick="closeApp()" class="bg-slate-800 text-white px-4 py-2 rounded-full font-semibold text-sm hover:bg-slate-900 transition flex items-center gap-2">
-        <i class="ph ph-house"></i> Home
-    </button>
-
+    
     <xmp id="code-participant"><!DOCTYPE html>
 <html lang="en">
 <head>
@@ -995,9 +994,7 @@ function renderAdminTable(data) {
 
 </div>
 </body>
-</html>
-        </xmp>
-
+</html></xmp>
     <xmp id="code-judge"><!DOCTYPE html>
 <html lang="en">
 <head>
@@ -2117,9 +2114,7 @@ function performSave() {
         function isCanvasBlank(c) { const bl=document.createElement('canvas'); bl.width=c.width; bl.height=c.height; return c.toDataURL()===bl.toDataURL(); }
     </script>
 </body>
-</html>
-        </xmp>
-
+</html></xmp>
     <xmp id="code-admin"><!DOCTYPE html>
 <html lang="en">
 <head>
@@ -2389,7 +2384,7 @@ function performSave() {
     <script>
         // *** SECURITY NOTICE: REPLACE WITH YOUR EXACT WEB APP URL ***
         // *** ACCESS SETTING MUST BE: "ANYONE" ***
-        const MANUAL_URL = "https://script.google.com/macros/s/AKfycbyhHHyfk2WPonCXVmc03Hc0fcBhkGatKfkXDD-f4nDGlFCMo4RZ8QNwOCBd7szw2kyB/exec";
+        const MANUAL_URL = "https://script.google.com/macros/s/AKfycbwMfXrYIPg-8bb5HXcwXi-cObn6WvRXtYwu8VYsyDvd10yzCrPlhs3xfQdb5uAUp4HW/exec";
         
         // SYSTEM LOGO URL
         const LOGO_URL = "https://i.postimg.cc/mgfGYYGq/download-34.jpg";
@@ -3207,8 +3202,7 @@ function performSave() {
     }
     </script>
 </body>
-</html>
-        </xmp>
+</html></xmp>
 
     <script>
         // 1. The Master URL
@@ -3224,64 +3218,78 @@ function performSave() {
             }
         }
 
-        // Check when page loads
         window.addEventListener('load', updateConnectionStatus);
-        
-        // Check whenever network status changes
         window.addEventListener('online', updateConnectionStatus);
         window.addEventListener('offline', updateConnectionStatus);
 
-       function launchApp(type) {
-    // 1. Check for Internet
-    if (!navigator.onLine) {
-        updateConnectionStatus();
-        return;
-    }
-
-    // 2. SHOW LOADING SCREEN (Curtain Up)
-    document.getElementById('loading-overlay').style.display = 'flex';
-
-    const storageId = 'code-' + type;
-    const element = document.getElementById(storageId);
-    
-    let rawCode = element.tagName === 'TEXTAREA' || element.tagName === 'INPUT' 
-                  ? element.value 
-                  : element.textContent;
-
-    if (!rawCode || rawCode.trim().length < 50) {
-        alert("Error: Code not found.");
-        document.getElementById('loading-overlay').style.display = 'none';
-        return;
-    }
-
-    const urlRegex = /(const\s+(?:SCRIPT_URL|MANUAL_URL)\s*=\s*")([^"]+)(";)/g;
-    const processedHtml = rawCode.replace(urlRegex, `$1${MASTER_SCRIPT_URL}$3`);
-
-    const frame = document.getElementById('app-frame');
-    
-    // === THE FIX IS HERE ===
-    // We turn the frame ON immediately so it starts rendering behind the curtain.
-    // Since z-index of loader is 100 and frame is 50, the user won't see it yet.
-    frame.style.display = 'block'; 
-    frame.srcdoc = processedHtml;
-    
-    // 3. THE DELAY
-    // Now we wait while the frame renders in the background
-    setTimeout(() => {
-        // Hide the Home UI
-        document.getElementById('home-ui').style.display = 'none';
-        
-        // Lift the curtain (The app is now already fully painted underneath)
-        document.getElementById('loading-overlay').style.display = 'none';
-        document.getElementById('home-btn').style.display = 'flex';
-    }, 1500);
-}
-        function closeApp() {
+        // --- BACK BUTTON SUPPORT ---
+        window.addEventListener('popstate', function(event) {
             window.location.reload();
+        });
+        // ---------------------------
+
+        function launchApp(type) {
+            if (!navigator.onLine) {
+                updateConnectionStatus();
+                return;
+            }
+
+            // A. Show Loading Screen First
+            const loader = document.getElementById('loading-overlay');
+            loader.style.display = 'flex';
+            loader.style.opacity = '1';
+
+            // B. Wait 50ms to ensure the spinner is visible
+            setTimeout(() => {
+                const storageId = 'code-' + type;
+                const element = document.getElementById(storageId);
+                
+                let rawCode = element.tagName === 'TEXTAREA' || element.tagName === 'INPUT' 
+                              ? element.value 
+                              : element.textContent;
+
+                if (!rawCode || rawCode.trim().length < 50) {
+                    alert("Error: Code not found.");
+                    loader.style.display = 'none';
+                    return;
+                }
+
+                // Push History (Enables Back Button)
+                history.pushState({ appOpen: true }, "", "#" + type);
+
+                const urlRegex = /(const\s+(?:SCRIPT_URL|MANUAL_URL)\s*=\s*")([^"]+)(";)/g;
+                const processedHtml = rawCode.replace(urlRegex, `$1${MASTER_SCRIPT_URL}$3`);
+
+                const frame = document.getElementById('app-frame');
+                
+                // C. Smooth Reveal Logic
+                frame.style.display = 'block'; 
+                frame.style.opacity = '0';     
+
+                // Wait for the iframe to actually load content
+                frame.onload = function() {
+                    document.getElementById('home-ui').style.display = 'none';
+                    loader.style.opacity = '0';
+                    setTimeout(() => { loader.style.display = 'none'; }, 300);
+
+                    frame.style.opacity = '1';
+                    frame.onload = null; // Clean up
+                };
+
+                // Failsafe: If app hangs for 3 seconds, show it anyway
+                setTimeout(() => {
+                    if (frame.style.opacity === '0') {
+                        loader.style.display = 'none';
+                        document.getElementById('home-ui').style.display = 'none';
+                        frame.style.opacity = '1';
+                    }
+                }, 3000);
+
+                // Inject Code
+                frame.srcdoc = processedHtml;
+
+            }, 50);
         }
     </script>
 </body>
 </html>
-
-
-
