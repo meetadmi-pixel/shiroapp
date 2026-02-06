@@ -2677,24 +2677,121 @@ function performSave() {
         function setVal(id, val) { setToggleState(id, val); }
 
         // --- GRAPH ---
-        async function loadGraph() {
-            const btn = document.getElementById('refreshGraphBtn'); btn.innerHTML = `<i class="ph ph-spinner animate-spin"></i> Loading...`;
-            try {
-                const stats = await fetch(API_URL + "?action=getGraphData").then(r => r.json());
-                if(!stats || stats.length === 0) { btn.innerHTML = "No Data"; return; }
-                const ctx = document.getElementById('progressChart').getContext('2d');
-                if (CHART_INSTANCE) CHART_INSTANCE.destroy();
-                CHART_INSTANCE = new Chart(ctx, {
-                    type: 'bar',
-                    data: {
-                        labels: stats.map(s => `${s.name} (${s.category})`),
-                        datasets: [{ label: 'Completion %', data: stats.map(s => s.total > 0 ? (s.judged / s.total * 100) : 0), backgroundColor: stats.map(s => { const p = s.total > 0 ? (s.judged / s.total) : 0; return p >= 1 ? '#22c55e' : (p >= 0.5 ? '#3b82f6' : '#94a3b8'); }), borderRadius: 6, barPercentage: 0.7 }]
-                    },
-                    options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: (c) => { const s = stats[c.dataIndex]; return ` ${s.judged} / ${s.total} Projects (${c.raw.toFixed(1)}%)`; } } } }, scales: { x: { beginAtZero: true, max: 100, title: { display: true, text: 'Percentage Complete' } }, y: { grid: { display: false } } } }
-                });
-            } catch(e) {} btn.innerHTML = `<i class="ph ph-arrows-clockwise"></i> Refresh Data`;
+	async function loadGraph() {
+    const btn = document.getElementById('refreshGraphBtn');
+    btn.innerHTML = `<i class="ph ph-spinner animate-spin"></i> Loading...`;
+
+    try {
+        const stats = await fetch(API_URL + "?action=getGraphData").then(r => r.json());
+        console.log("Graph Data:", stats); // Keep this for debugging
+
+        if (!stats || stats.length === 0) {
+            btn.innerHTML = "No Data Found";
+            return;
         }
 
+        const ctx = document.getElementById('progressChart').getContext('2d');
+        if (CHART_INSTANCE) CHART_INSTANCE.destroy();
+
+        const labels = stats.map(s => s.category);
+        const datasets = [];
+
+        // 1. Determine Max Judges
+        let maxJudges = 0;
+        stats.forEach(s => {
+            if (s.judges && s.judges.length > maxJudges) maxJudges = s.judges.length;
+        });
+
+        // 2. Build Stacked Bars
+        for (let i = 0; i < maxJudges; i++) {
+            
+            // --- DATASET A: COLORED BAR ---
+            datasets.push({
+                label: `J${i + 1} Done`,
+                stack: 'mainStack',
+                data: stats.map(cat => {
+                    const judge = cat.judges[i];
+                    if (!judge) return 0;
+
+                    // UNIVERSAL FIX: Check for 'percentage' OR 'percent'
+                    const val = (judge.percentage !== undefined) ? judge.percentage : (judge.percent || 0);
+                    
+                    const count = cat.judges.length || 1;
+                    const slotWidth = 100 / count;
+                    
+                    return (val / 100) * slotWidth;
+                }),
+                backgroundColor: stats.map(cat => cat.judges[i] ? cat.judges[i].color : 'transparent'),
+                borderWidth: 1,
+                borderColor: '#fff',
+                customData: stats.map(cat => cat.judges[i] || null)
+            });
+
+            // --- DATASET B: GHOST BAR ---
+            datasets.push({
+                label: `J${i + 1} Remaining`,
+                stack: 'mainStack',
+                data: stats.map(cat => {
+                    const judge = cat.judges[i];
+                    if (!judge) return 0;
+
+                    // UNIVERSAL FIX here too
+                    const val = (judge.percentage !== undefined) ? judge.percentage : (judge.percent || 0);
+
+                    const count = cat.judges.length || 1;
+                    const slotWidth = 100 / count;
+                    const doneWidth = (val / 100) * slotWidth;
+
+                    return slotWidth - doneWidth;
+                }),
+                backgroundColor: 'rgba(200, 200, 200, 0.2)',
+                borderWidth: 0,
+                customData: stats.map(cat => cat.judges[i] || null)
+            });
+        }
+
+        CHART_INSTANCE = new Chart(ctx, {
+            type: 'bar',
+            data: { labels: labels, datasets: datasets },
+            options: {
+                indexAxis: 'y',
+                responsive: true,
+                maintainAspectRatio: false, // Important!
+                scales: {
+                    x: { stacked: true, max: 100, title: { display: true, text: '% Completion' } },
+                    y: { stacked: true, grid: { display: false } }
+                },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        backgroundColor: 'rgba(15, 23, 42, 0.95)',
+                        callbacks: {
+                            label: (c) => {
+                                const info = c.dataset.customData[c.dataIndex];
+                                if (!info) return null;
+                                
+                                // UNIVERSAL FIX for Tooltip
+                                const val = (info.percentage !== undefined) ? info.percentage : (info.percent || 0);
+                                const total = (info.totalProjects !== undefined) ? info.totalProjects : (info.total || 0);
+
+                                return [
+                                    `👤 ${info.name}`,
+                                    `   Progress: ${Math.round(val)}%`,
+                                    `   Part A: ${info.doneA} / ${total}`,
+                                    `   Part BC: ${info.doneBC} / ${total}`
+                                ];
+                            }
+                        }
+                    }
+                }
+            }
+        });
+
+    } catch (e) {
+        console.error("Graph Error:", e);
+    }
+    btn.innerHTML = `<i class="ph ph-arrows-clockwise"></i> Refresh Data`;
+}
         // --- JUDGE MANAGEMENT ---
         function autoGenCreds() { const n = document.getElementById('jName').value.trim(); if(!n) return; document.getElementById('jUser').value = n.split(' ')[0].toLowerCase() + Math.floor(Math.random()*100); document.getElementById('jPass').value = Math.random().toString(36).slice(-5).toUpperCase(); }
         
@@ -3293,3 +3390,4 @@ function performSave() {
     </script>
 </body>
 </html>
+
