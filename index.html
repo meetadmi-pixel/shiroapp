@@ -2115,8 +2115,7 @@ function performSave() {
     </script>
 </body>
 </html></xmp>
-    <xmp id="code-admin">
-		<!DOCTYPE html>
+    <xmp id="code-admin"><!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -3055,7 +3054,7 @@ function performSave() {
         }
 
         // --- OPTIMIZED RENDERING (PAGINATION) ---
-        function renderProjectRankings(container) {
+     function renderProjectRankings(container) {
      const fmt = (n) => { const num = parseFloat(n); if(isNaN(num)) return "-"; return num.toFixed(3); };
 
      for (const [catName, projs] of Object.entries(COMPUTED_RESULTS.rankedCats)) {
@@ -3086,10 +3085,12 @@ function performSave() {
                 : `<td class="text-center text-gray-300 border-l border-gray-50 p-2">-</td><td class="text-center text-gray-300 p-2">-</td>`;
             }
             
-            // MODERATION BUTTON
+            // --- UPDATED MODERATION BUTTON LOGIC ---
+            // If ENABLED: Show clickable Pencil icon
+            // If DISABLED: Show grayed-out Lock icon and disable pointer events
             const modBtn = (typeof MODERATION_ENABLED !== 'undefined' && MODERATION_ENABLED) 
-                ? `<button onclick="openModeration('${p.id}')" class="text-gray-400 hover:text-indigo-600 p-1"><i class="ph ph-pencil-simple"></i></button>` 
-                : ``;
+                ? `<button onclick="openModeration('${p.id}')" title="Moderate Project" class="text-gray-400 hover:text-indigo-600 p-1 transition-colors"><i class="ph ph-pencil-simple"></i></button>` 
+                : `<button disabled title="Moderation Not Available" class="text-gray-300 cursor-not-allowed p-1"><i class="ph ph-lock-key"></i></button>`;
 
             return `
             <tr class="${p.isQualifier ? 'bg-green-50' : 'hover:bg-gray-50'} transition-colors group text-xs">
@@ -3549,8 +3550,7 @@ function performSave() {
     }
     </script>
 </body>
-</html>
-	</xmp>
+</html></xmp>
 
     <script>
         // 1. The Master URL
@@ -3641,6 +3641,7 @@ function performSave() {
     </script>
 </body>
 </html>
+
 
 
 
