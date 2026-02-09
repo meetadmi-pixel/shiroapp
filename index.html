@@ -2115,7 +2115,8 @@ function performSave() {
     </script>
 </body>
 </html></xmp>
-    <xmp id="code-admin"><!DOCTYPE html>
+    <xmp id="code-admin">
+		<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -2617,7 +2618,7 @@ function performSave() {
         let CONFIG = {}, JUDGES = [], ANALYSIS_DATA = null, COMPUTED_RESULTS = null;
         let ACTIVE_TAB = 'A', CAT_A = [], CAT_BC = [], ALL_CATS = [];
         let MODERATION_ENABLED = false, CHART_INSTANCE = null, MOD_CANVAS = null, CURRENT_MOD_PID = null;
-        
+        let CURRENT_REPORT_TYPE = 'project'; // Default to project view
         // PAGINATION STATE
         let PAGINATION_STATE = {}; // Stores current page for each category: { "Physics": 1, "Chemistry": 1 }
         const ITEMS_PER_PAGE = 50;
@@ -2628,7 +2629,11 @@ function performSave() {
         function setPage(p) { document.querySelectorAll('.view-section').forEach(e => e.classList.add('hidden')); document.getElementById('view-'+p).classList.remove('hidden'); setActiveNav(p); }
         function setActiveNav(p) { ['config','judges','analysis'].forEach(id => { const btn = document.getElementById('nav-'+id); if(id===p) { btn.classList.remove('text-gray-500'); btn.classList.add('text-indigo-600', 'bg-white', 'shadow-sm'); } else { btn.classList.add('text-gray-500'); btn.classList.remove('text-indigo-600', 'bg-white', 'shadow-sm'); } }); }
         function logout() { if(confirm("Are you sure you want to securely log out?")) { document.getElementById('mainUI').classList.add('hidden'); document.getElementById('loginOverlay').classList.remove('hidden'); document.getElementById('adminPass').value = ''; JUDGES = []; CONFIG = {}; ANALYSIS_DATA = null; } }
-
+	function getCatAbbr(catName) {
+    const short = catName.substring(0, 3);
+    const suffix = catName.includes('(JS)') ? '(JS)' : '(SS)';
+    return `${short}${suffix}`;
+}
         // --- AUTHENTICATION ---
         async function attemptLogin() {
             const pass = document.getElementById('adminPass').value;
@@ -2876,74 +2881,173 @@ function performSave() {
         }
 
         // --- ANALYSIS ---
-        async function runAnalysis() {
-            document.getElementById('analysisProgress').classList.remove('hidden'); 
-            document.getElementById('progressBar').style.width="20%";
-            
-            const res = await fetch(API_URL + "?action=getAnalysisData").then(r=>r.json());
-            ANALYSIS_DATA = res; 
-            document.getElementById('progressBar').style.width="60%";
-            
-            const lvl=document.getElementById('analysisLevel').value, cat=document.getElementById('analysisCat').value, reg=document.getElementById('analysisRegion').value;
-            const regions = [...new Set(res.projects.map(p=>p.region))]; 
-            const rSel=document.getElementById('analysisRegion'); 
-            if(rSel.options.length===1) regions.forEach(r=>rSel.innerHTML+=`<option value="${r}">${r}</option>`);
-            
-            const cats={}; 
-            res.projects.forEach(p=>{ 
-                if((lvl!=='BOTH'&&p.grade!==lvl)||(cat!=='ALL'&&p.category!==cat)||(reg!=='ALL'&&p.region!==reg))return; 
-                if(!cats[p.category])cats[p.category]=[]; 
-                let names = p.std1; if(p.std2 && p.std2.trim() !== "") names += " and " + p.std2;
-                cats[p.category].push({id:p.id,name:p.name,students:names,school:p.school,region:p.region,grade:p.grade,category:p.category,judges:{},total:0,points:0,rank:0}); 
-            });
+       async function runAnalysis() {
+    document.getElementById('analysisProgress').classList.remove('hidden'); 
+    document.getElementById('progressBar').style.width="20%";
+    
+    const res = await fetch(API_URL + "?action=getAnalysisData").then(r=>r.json());
+    ANALYSIS_DATA = res; 
+    document.getElementById('progressBar').style.width="60%";
+    
+    const lvl=document.getElementById('analysisLevel').value;
+    const cat=document.getElementById('analysisCat').value;
+    const reg=document.getElementById('analysisRegion').value;
 
-            const clean = (val) => { const match = String(val).match(/-?\d+(\.\d+)?/); return match ? parseFloat(match[0]) : 0; };
+    const regions = [...new Set(res.projects.map(p=>p.region))]; 
+    const rSel=document.getElementById('analysisRegion'); 
+    if(rSel.options.length===1) regions.forEach(r=>rSel.innerHTML+=`<option value="${r}">${r}</option>`);
+    
+    const cats={}; 
+    res.projects.forEach(p=>{ 
+        if((lvl!=='BOTH'&&p.grade!==lvl)||(cat!=='ALL'&&p.category!==cat)||(reg!=='ALL'&&p.region!==reg))return; 
+        if(!cats[p.category]) cats[p.category]=[]; 
+        let names = p.std1; if(p.std2) names += " & " + p.std2;
+        
+        cats[p.category].push({
+            id:p.id, name:p.name, students:names, school:p.school, region:p.region, grade:p.grade, category:p.category,
+            judges:{}, total:0, points:0, rank:0, displayRank:0
+        }); 
+    });
 
-            res.scores.forEach(s=>{ 
-                for(const c in cats){ 
-                    const p=cats[c].find(x=>x.id===s.pid); 
-                    if(p){ 
-                        let sa=0,sb=0; 
-                        s.qScores.forEach((v,i)=>{
-                            const numVal = clean(v);
-                            if(i<res.questions.filter(q=>q.part.includes('A')&&!q.part.includes('ORAL')).length) sa+=numVal;
-                            else sb+=numVal;
-                        }); 
-                        p.judges[s.judge]={scoreA:sa,scoreBC:sb,fullScores:s.qScores}; 
-                    } 
-                } 
-            });
-            
-            const schools={}, regs={};
-            for(const c in cats) {
-                cats[c].forEach(p=>{ 
-                    const j=Object.values(p.judges); 
-                    if(j.length>0){ 
-                        const avgA = j.reduce((a,b)=>a+b.scoreA,0)/j.length;
-                        const avgBC = j.reduce((a,b)=>a+b.scoreBC,0)/j.length;
-                        p.avgA = avgA; p.avgBC = avgBC; p.total = avgA + avgBC;
-                    } else { p.avgA = 0; p.avgBC = 0; p.total = 0; }
+    const clean = (val) => { const match = String(val).match(/-?\d+(\.\d+)?/); return match ? parseFloat(match[0]) : 0; };
+
+    res.scores.forEach(s=>{ 
+        for(const c in cats){ 
+            const p=cats[c].find(x=>x.id===s.pid); 
+            if(p){ 
+                let sa=0,sb=0; 
+                s.qScores.forEach((v,i)=>{
+                    const numVal = clean(v);
+                    if(i < res.questions.filter(q=>q.part.includes('A') && !q.part.includes('ORAL')).length) sa+=numVal;
+                    else sb+=numVal;
                 }); 
-                cats[c].sort((a,b)=>b.total-a.total);
-                cats[c].forEach((p,i)=>{ 
-                    p.rank=i+1; p.points=cats[c].length-i; 
-                    if(!schools[p.school])schools[p.school]={name:p.school,points:{},total:0}; 
-                    schools[p.school].total+=p.points; schools[p.school].points[c]=(schools[p.school].points[c]||0)+p.points; 
-                    if(!regs[p.region])regs[p.region]={name:p.region,points:{},total:0}; 
-                    regs[p.region].total+=p.points; regs[p.region].points[c]=(regs[p.region].points[c]||0)+p.points; 
-                });
-                
-                // Reset Pagination for this run
-                PAGINATION_STATE[c] = 1;
+                p.judges[s.judge]={scoreA:sa,scoreBC:sb}; 
+            } 
+        } 
+    });
+    
+    const schools={}, regs={};
+    
+    for(const c in cats) {
+        // 1. Calculate Totals
+        cats[c].forEach(p=>{ 
+            const j=Object.values(p.judges); 
+            if(j.length>0){ 
+                p.avgA = j.reduce((a,b)=>a+b.scoreA,0)/j.length;
+                p.avgBC = j.reduce((a,b)=>a+b.scoreBC,0)/j.length;
+                p.total = p.avgA + p.avgBC;
+            } else { p.total = 0; }
+        }); 
+
+        // 2. Sort High to Low
+        cats[c].sort((a,b)=>b.total - a.total);
+
+        // 3. Assign Ranks & Points (HANDLING TIES)
+        cats[c].forEach((p,i)=>{ 
+            // Check if tied with previous
+            if (i > 0 && Math.abs(p.total - cats[c][i-1].total) < 0.01) {
+                p.displayRank = cats[c][i-1].displayRank; // Same rank as previous
+            } else {
+                p.displayRank = i + 1; // New rank
             }
+            p.rank = i + 1; // Internal sequence
 
-            COMPUTED_RESULTS={rankedCats:cats,schools:schools,regions:regs,allCats:Object.keys(cats).sort()};
-            document.getElementById('analysisProgress').classList.add('hidden'); 
-            document.getElementById('analysisResults').classList.remove('hidden'); 
-            showReport('project');
-        }
+            // Points Logic: Based on Display Rank (Tied projects get equal points)
+            // Example: 5 projects. #1 gets 5pts. Two #2s get 4pts each. Next is #4 getting 2pts.
+            p.points = cats[c].length - (p.displayRank - 1);
 
+            // Aggregate SCHOOL Points
+            if(!schools[p.school]) schools[p.school]={name:p.school, points:{}, total:0}; 
+            schools[p.school].total += p.points; 
+            schools[p.school].points[c] = (schools[p.school].points[c]||0) + p.points; 
+
+            // Aggregate REGION Points
+            if(!regs[p.region]) regs[p.region]={name:p.region, points:{}, total:0}; 
+            regs[p.region].total += p.points; 
+            regs[p.region].points[c] = (regs[p.region].points[c]||0) + p.points; 
+        });
+        
+        PAGINATION_STATE[c] = 1;
+    }
+
+    // 4. Sort Schools/Regions by Points for final display
+    const rankAggregates = (obj) => {
+        const arr = Object.values(obj).sort((a,b) => b.total - a.total);
+        arr.forEach((item, i) => {
+             // Tie logic for Schools/Regions based on Total Points
+             if (i > 0 && Math.abs(item.total - arr[i-1].total) < 0.01) {
+                item.displayRank = arr[i-1].displayRank;
+             } else {
+                item.displayRank = i + 1;
+             }
+        });
+        return obj;
+    };
+    rankAggregates(schools);
+    rankAggregates(regs);
+
+    COMPUTED_RESULTS={rankedCats:cats,schools:schools,regions:regs,allCats:Object.keys(cats).sort()};
+    document.getElementById('analysisProgress').classList.add('hidden'); 
+    document.getElementById('analysisResults').classList.remove('hidden'); 
+    showReport(CURRENT_REPORT_TYPE || 'project');
+}
+	function renderMatrix(container, dataMap, label) { 
+    // Sort data for display
+    const sortedItems = Object.values(dataMap).sort((a,b) => b.total - a.total);
+    
+    // Create Table
+    const table = document.createElement('table'); 
+    table.className = "w-full analysis-table border shadow-sm rounded-lg overflow-hidden text-[10px]"; // Small text for many columns
+    
+    // --- Header Construction ---
+    // Generate 3-letter codes from categories (e.g. "AGRICULTURE (JS)" -> "AGR")
+    // We add a tooltip (title attribute) so you can hover to see the full name/level
+    let thead = `<thead class="bg-gray-50 text-gray-600 font-bold border-b border-gray-200">
+        <tr>
+            <th class="p-2 w-8 text-center border-r border-gray-200">Rank</th>
+            <th class="text-left p-2 w-48 border-r border-gray-200">${label} Name</th>`;
+            
+    COMPUTED_RESULTS.allCats.forEach(c => { 
+        // Create short code: AGR, BIO, etc.
+        const short = c.substring(0,3); 
+        // Check for JS/SS to color code header slightly? Optional.
+        thead += `<th class="text-center w-8 px-1 border-r border-gray-100 cursor-help" title="${c}">${short}</th>`; 
+    }); 
+    
+    thead += `<th class="text-right bg-indigo-600 text-white font-bold px-2 w-16">TOTAL</th></tr></thead>`; 
+    
+    // --- Body Construction ---
+    let tbody = "<tbody class='divide-y divide-gray-50 bg-white'>"; 
+    
+    sortedItems.forEach((item) => { 
+        let row = `<tr class="hover:bg-blue-50 transition-colors">
+            <td class="font-bold text-center text-gray-500 p-2 border-r border-gray-100">${item.displayRank}</td>
+            <td class="font-bold text-gray-800 p-2 text-left truncate border-r border-gray-100" title="${item.name}">
+                ${item.name}
+            </td>`; 
+            
+        COMPUTED_RESULTS.allCats.forEach(c => { 
+            const pts = item.points[c] || 0; 
+            // Highlight cells with points
+            if(pts > 0) {
+                row += `<td class="text-center font-bold text-indigo-700 bg-indigo-50/50 border-r border-gray-100">${pts}</td>`;
+            } else {
+                row += `<td class="text-center text-gray-200 border-r border-gray-50">-</td>`;
+            }
+        }); 
+        
+        row += `<td class="text-right font-bold text-indigo-700 bg-indigo-50 px-2 border-l border-indigo-100">${item.total.toFixed(1)}</td></tr>`; 
+        tbody += row; 
+    }); 
+    
+    table.innerHTML = thead + tbody + "</tbody>"; 
+    container.appendChild(table); 
+}
         function showReport(type) {
+            // 1. UPDATE GLOBAL STATE
+    	    CURRENT_REPORT_TYPE = type;
+	    console.log("Switched Report Type to:", CURRENT_REPORT_TYPE); // Debugging check	    
+
             const container = document.getElementById('analysisResults'); container.innerHTML = "";
             document.querySelectorAll('.report-tab').forEach(t => { t.classList.remove('text-indigo-600', 'border-indigo-600'); t.classList.add('text-gray-500'); });
             document.getElementById(`rep-${type}`).classList.add('text-indigo-600', 'border-indigo-600');
@@ -2952,69 +3056,92 @@ function performSave() {
 
         // --- OPTIMIZED RENDERING (PAGINATION) ---
         function renderProjectRankings(container) {
-             const fmt = (n) => { const num = parseFloat(n); if(isNaN(num)) return "-"; return num.toFixed(3); };
+     const fmt = (n) => { const num = parseFloat(n); if(isNaN(num)) return "-"; return num.toFixed(3); };
 
-             for (const [catName, projs] of Object.entries(COMPUTED_RESULTS.rankedCats)) {
-                let maxJudges = 0; 
-                projs.forEach(p => maxJudges = Math.max(maxJudges, Object.keys(p.judges).length));
-                
-                // PAGINATION LOGIC
-                const page = PAGINATION_STATE[catName] || 1;
-                const totalPages = Math.ceil(projs.length / ITEMS_PER_PAGE);
-                const start = (page - 1) * ITEMS_PER_PAGE;
-                const end = start + ITEMS_PER_PAGE;
-                const pagedProjs = projs.slice(start, end);
+     for (const [catName, projs] of Object.entries(COMPUTED_RESULTS.rankedCats)) {
+        let maxJudges = 0; 
+        projs.forEach(p => maxJudges = Math.max(maxJudges, Object.keys(p.judges).length));
+        
+        // PAGINATION
+        const page = PAGINATION_STATE[catName] || 1;
+        const totalPages = Math.ceil(projs.length / ITEMS_PER_PAGE);
+        const start = (page - 1) * ITEMS_PER_PAGE;
+        const end = start + ITEMS_PER_PAGE;
+        const pagedProjs = projs.slice(start, end);
 
-                const wrapper = document.createElement('div'); 
-                wrapper.className = "mb-8 bg-white border border-gray-200 rounded-2xl overflow-hidden shadow-sm overflow-x-auto";
-                
-                let jHeaders = ""; 
-                for(let i=1; i<=maxJudges; i++) {
-                    jHeaders += `<th class="text-center bg-indigo-50/40 text-indigo-900 border-l border-indigo-100 w-16 text-[9px] p-2 whitespace-normal break-words">J${i}<br>A</th><th class="text-center bg-indigo-50/40 text-indigo-900 w-16 text-[9px] p-2 whitespace-normal break-words">J${i}<br>BC</th>`;
-                }
-                
-                // Build HTML String (Faster)
-                const rowsHtml = pagedProjs.map(p => {
-                    let jCells = ""; 
-                    const judges = Object.values(p.judges);
-                    for(let i=0; i<maxJudges; i++) {
-                        jCells += judges[i] 
-                        ? `<td class="text-center text-gray-600 border-l border-gray-50 p-2 font-mono">${fmt(judges[i].scoreA)}</td><td class="text-center text-gray-600 p-2 font-mono">${fmt(judges[i].scoreBC)}</td>` 
-                        : `<td class="text-center text-gray-300 border-l border-gray-50 p-2">-</td><td class="text-center text-gray-300 p-2">-</td>`;
-                    }
-                    const modBtn = MODERATION_ENABLED ? `<button onclick="openModeration('${p.id}')" class="text-gray-400 hover:text-indigo-600 transition-colors p-1"><i class="ph ph-pencil-simple text-lg"></i></button>` : `<i class="ph ph-lock text-gray-300"></i>`;
-                    return `
-                    <tr class="${p.isQualifier ? 'bg-green-50' : 'hover:bg-gray-50'} transition-colors group">
-                        <td class="p-3 text-center font-bold text-gray-500">${p.rank}</td>
-                        <td class="p-3 font-mono text-gray-400 break-words">${p.id}</td>
-                        <td class="p-3 font-medium text-gray-700 leading-snug break-words">${p.students}</td>
-                        <td class="p-3 font-medium text-gray-800 leading-snug break-words">${p.name}</td>
-                        <td class="p-3 text-gray-500 leading-snug break-words">${p.school}</td>
-                        <td class="p-3 text-center">${p.grade}</td>
-                        <td class="p-3 text-gray-500 leading-snug break-words">${p.region}</td>
-                        ${jCells}
-                        <td class="p-3 text-center font-bold text-gray-700 bg-gray-50/50 border-l font-mono">${fmt(p.avgA)}</td>
-                        <td class="p-3 text-center font-bold text-gray-700 bg-gray-50/50 font-mono">${fmt(p.avgBC)}</td>
-                        <td class="p-3 text-right font-bold text-indigo-600 bg-indigo-50/30 text-sm font-mono">${fmt(p.total)}</td>
-                        <td class="p-3 text-center">${modBtn}</td>
-                    </tr>`;
-                }).join('');
-
-                wrapper.innerHTML = `
-                <div class="bg-gray-50 p-3 font-bold text-sm border-b flex justify-between sticky left-0 items-center">
-                    <span>${catName} <span class="text-xs font-normal text-gray-500 ml-2">(${projs.length} Total)</span></span>
-                    <div class="flex items-center gap-2">
-                         <span class="text-xs text-gray-400 mr-2">Page ${page} of ${totalPages}</span>
-                         <button onclick="changePage('${catName}', -1)" class="px-2 py-1 bg-white border rounded hover:bg-gray-100 disabled:opacity-50" ${page===1?'disabled':''}>Prev</button>
-                         <button onclick="changePage('${catName}', 1)" class="px-2 py-1 bg-white border rounded hover:bg-gray-100 disabled:opacity-50" ${page===totalPages?'disabled':''}>Next</button>
-                    </div>
-                </div>
-                <table class="w-full text-left border-collapse"><thead><tr class="bg-gray-50 text-xs text-gray-500 font-bold border-b border-gray-200 uppercase tracking-wider"><th class="p-3 w-12 text-center whitespace-normal">#</th><th class="p-3 w-20 whitespace-normal">ID</th><th class="p-3 w-48 whitespace-normal">Student Names</th><th class="p-3 w-64 whitespace-normal">Project Title</th><th class="p-3 w-32 whitespace-normal">School</th><th class="p-3 w-16 text-center whitespace-normal">Lvl</th><th class="p-3 w-32 whitespace-normal">FROM</th>${jHeaders}<th class="p-3 w-20 text-center bg-gray-100 border-l whitespace-normal">Avg A</th><th class="p-3 w-20 text-center bg-gray-100 whitespace-normal">Avg BC</th><th class="p-3 w-24 text-right bg-indigo-600 text-white whitespace-normal">TOTAL</th><th class="p-3 w-20 text-center whitespace-normal">Action</th></tr></thead>
-                <tbody class="divide-y divide-gray-50 text-xs">${rowsHtml}</tbody></table>`;
-                
-                container.appendChild(wrapper);
-             }
+        const wrapper = document.createElement('div'); 
+        wrapper.className = "mb-8 bg-white border border-gray-200 rounded-2xl overflow-hidden shadow-sm overflow-x-auto";
+        
+        let jHeaders = ""; 
+        for(let i=1; i<=maxJudges; i++) {
+            jHeaders += `<th class="text-center bg-indigo-50/40 text-indigo-900 border-l border-indigo-100 w-16 text-[9px] p-2">J${i}<br>A</th><th class="text-center bg-indigo-50/40 text-indigo-900 w-16 text-[9px] p-2">J${i}<br>BC</th>`;
         }
+        
+        const rowsHtml = pagedProjs.map(p => {
+            let jCells = ""; 
+            const judges = Object.values(p.judges);
+            for(let i=0; i<maxJudges; i++) {
+                jCells += judges[i] 
+                ? `<td class="text-center text-gray-600 border-l border-gray-50 p-2 font-mono">${fmt(judges[i].scoreA)}</td><td class="text-center text-gray-600 p-2 font-mono">${fmt(judges[i].scoreBC)}</td>` 
+                : `<td class="text-center text-gray-300 border-l border-gray-50 p-2">-</td><td class="text-center text-gray-300 p-2">-</td>`;
+            }
+            
+            // MODERATION BUTTON
+            const modBtn = (typeof MODERATION_ENABLED !== 'undefined' && MODERATION_ENABLED) 
+                ? `<button onclick="openModeration('${p.id}')" class="text-gray-400 hover:text-indigo-600 p-1"><i class="ph ph-pencil-simple"></i></button>` 
+                : ``;
+
+            return `
+            <tr class="${p.isQualifier ? 'bg-green-50' : 'hover:bg-gray-50'} transition-colors group text-xs">
+                <td class="p-3 text-center font-bold text-gray-500">${p.rank}</td>
+                <td class="p-3 font-mono text-gray-400">${p.id}</td>
+                <td class="p-3 font-medium text-gray-700">${p.students}</td>
+                <td class="p-3 font-medium text-gray-800">${p.name}</td>
+                <td class="p-3 text-gray-500">${p.school}</td>
+                <td class="p-3 text-center">${p.grade}</td>
+                <td class="p-3 text-gray-500">${p.region}</td>
+                ${jCells}
+                <td class="p-3 text-center font-bold text-gray-700 bg-gray-50/50 border-l font-mono">${fmt(p.avgA)}</td>
+                <td class="p-3 text-center font-bold text-gray-700 bg-gray-50/50 font-mono">${fmt(p.avgBC)}</td>
+                <td class="p-3 text-right font-bold text-indigo-600 bg-indigo-50/30 font-mono">${fmt(p.total)}</td>
+                <td class="p-3 text-center font-bold text-gray-800 bg-yellow-50 border-l border-yellow-100">${p.displayRank}</td>
+                <td class="p-3 text-center">${modBtn}</td>
+            </tr>`;
+        }).join('');
+
+        wrapper.innerHTML = `
+        <div class="bg-gray-50 p-3 font-bold text-sm border-b flex justify-between sticky left-0 items-center">
+            <span>${catName} <span class="text-xs font-normal text-gray-500 ml-2">(${projs.length} Total)</span></span>
+            <div class="flex items-center gap-2">
+                 <span class="text-xs text-gray-400 mr-2">Page ${page} of ${totalPages}</span>
+                 <button onclick="changePage('${catName}', -1)" class="px-2 py-1 bg-white border rounded hover:bg-gray-100 disabled:opacity-50" ${page===1?'disabled':''}>Prev</button>
+                 <button onclick="changePage('${catName}', 1)" class="px-2 py-1 bg-white border rounded hover:bg-gray-100 disabled:opacity-50" ${page===totalPages?'disabled':''}>Next</button>
+            </div>
+        </div>
+        <table class="w-full text-left border-collapse">
+            <thead>
+                <tr class="bg-gray-50 text-xs text-gray-500 font-bold border-b border-gray-200 uppercase tracking-wider">
+                    <th class="p-3 w-10 text-center">#</th>
+                    <th class="p-3 w-20">ID</th>
+                    <th class="p-3 w-48">Students</th>
+                    <th class="p-3 w-64">Title</th>
+                    <th class="p-3 w-32">School</th>
+                    <th class="p-3 w-12 text-center">Lvl</th>
+                    <th class="p-3 w-24">Region</th>
+                    ${jHeaders}
+                    <th class="p-3 w-16 text-center bg-gray-100 border-l">Avg A</th>
+                    <th class="p-3 w-16 text-center bg-gray-100">Avg BC</th>
+                    <th class="p-3 w-20 text-right bg-indigo-600 text-white">Total</th>
+                    <th class="p-3 w-12 text-center bg-yellow-100 text-yellow-800">Pos</th>
+                    <th class="p-3 w-12 text-center">Act</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-50">${rowsHtml}</tbody>
+        </table>`;
+        
+        container.appendChild(wrapper);
+     }
+}
 
         function changePage(catName, direction) {
             const projs = COMPUTED_RESULTS.rankedCats[catName];
@@ -3029,74 +3156,197 @@ function performSave() {
             }
         }
 
-        function renderMatrix(container, dataMap, label) { const table = document.createElement('table'); table.className = "w-full analysis-table border shadow-sm rounded-lg overflow-hidden"; let thead = `<thead class="bg-gray-50"><tr><th class="w-16 text-center">Rank</th><th class="text-left py-4 pl-4">${label} Name</th>`; COMPUTED_RESULTS.allCats.forEach(c => thead += `<th class="text-center w-12 text-[9px]" title="${c}">${c.substring(0,3)}</th>`); thead += `<th class="text-right bg-indigo-600 text-white font-bold px-4">TOTAL PTS</th></tr></thead>`; let tbody = "<tbody class='divide-y divide-gray-100'>"; Object.values(dataMap).sort((a,b)=>b.total-a.total).forEach((item, idx) => { let row = `<tr class="hover:bg-gray-50"><td class="font-bold text-center text-gray-400">#${idx+1}</td><td class="font-bold text-gray-800 pl-4 py-3">${item.name}</td>`; COMPUTED_RESULTS.allCats.forEach(c => { const pts = item.points[c]||0; row += `<td class="text-center ${pts>0 ? 'font-bold text-indigo-700 bg-indigo-50/30' : 'text-gray-200'}">${pts||'-'}</td>`; }); tbody += row + `<td class="text-right font-bold text-indigo-700 bg-indigo-50 px-4">${item.total}</td></tr>`; }); table.innerHTML = thead + tbody + "</tbody>"; container.appendChild(table); }
-
-        // --- OPTIMIZED PDF (DATA DRIVEN, NOT DOM DRIVEN) ---
-        function generatePDF() {
-            if(!COMPUTED_RESULTS) return alert("Run Analysis First");
-            const { jsPDF } = window.jspdf; 
-            const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
-            const eventName = document.getElementById('eventName').value || "KSEF Results";
+        function renderMatrix(container, dataMap, label) { 
+    // Sort data
+    const sortedItems = Object.values(dataMap).sort((a,b) => b.total - a.total);
+    
+    // 1. Create a Wrapper Div for Horizontal Scrolling
+    const wrapper = document.createElement('div');
+    wrapper.className = "w-full overflow-x-auto border border-gray-200 shadow-sm rounded-lg mb-8 bg-white";
+    
+    // 2. Create Table (Added 'whitespace-nowrap' to force scrolling)
+    const table = document.createElement('table'); 
+    table.className = "w-full text-[10px] text-left border-collapse whitespace-nowrap"; 
+    
+    // --- Header ---
+    let thead = `<thead class="bg-gray-50 text-gray-600 font-bold border-b border-gray-200">
+        <tr>
+            <th class="p-3 w-10 text-center border-r border-gray-200 sticky left-0 bg-gray-50 z-10">#</th>
+            <th class="text-left p-3 w-48 border-r border-gray-200 sticky left-10 bg-gray-50 z-10 drop-shadow-sm">${label} Name</th>`;
             
-            const img = new Image(); img.src = LOGO_URL; img.crossOrigin = "Anonymous";
-            img.onload = function() { printPdf(doc, img, eventName); };
-            img.onerror = function() { printPdf(doc, null, eventName); };
+    COMPUTED_RESULTS.allCats.forEach(c => { 
+        const abbr = getCatAbbr(c); 
+        thead += `<th class="text-center px-2 py-3 border-r border-gray-100 cursor-help min-w-[50px]" title="${c}">${abbr}</th>`; 
+    }); 
+    
+    // Total and Pos Columns
+    thead += `<th class="text-right bg-indigo-600 text-white font-bold px-3 py-3 min-w-[60px]">Total</th>
+              <th class="text-center bg-yellow-100 text-yellow-800 font-bold px-3 py-3 min-w-[50px]">Pos</th>
+              </tr></thead>`; 
+    
+    // --- Body ---
+    let tbody = "<tbody class='divide-y divide-gray-50 bg-white'>"; 
+    
+    sortedItems.forEach((item, idx) => { 
+        // Tie-Aware Rank Calculation
+        if (idx > 0 && Math.abs(item.total - sortedItems[idx-1].total) < 0.01) {
+            item.displayRank = sortedItems[idx-1].displayRank;
+        } else {
+            item.displayRank = idx + 1;
         }
 
-        function printPdf(doc, img, eventName) {
-    const drawHeader = () => {
-        if(img) { try { doc.addImage(img, 'JPEG', 14, 10, 15, 15); } catch(e){} }
-        doc.setFontSize(16); doc.setTextColor(0, 0, 0); doc.text(eventName, 35, 20);
-        doc.setFontSize(10); doc.setTextColor(100, 100, 100); doc.text(`Analysis Report | Generated: ${new Date().toLocaleString()}`, 35, 26);
-        return 35;
-    };
-    let finalY = drawHeader();
-
-    // Loop through DATA
-    Object.entries(COMPUTED_RESULTS.rankedCats).forEach(([catName, projs]) => {
-        if (finalY > 180) { doc.addPage(); finalY = drawHeader(); }
-        doc.setFontSize(12); doc.setTextColor(79, 70, 229); doc.setFont(undefined, 'bold');
-        doc.text(catName, 14, finalY); doc.setFont(undefined, 'normal'); finalY += 5;
-
-        // 1. UPDATED DATA MAPPING (Added Grade and Region)
-        const bodyData = projs.map(p => [
-            p.rank, 
-            p.id, 
-            p.students, 
-            p.name, 
-            p.school,
-            p.grade || "",   // NEW: JS or SS
-            p.region || "",  // NEW: Region
-            p.avgA.toFixed(2), 
-            p.avgBC.toFixed(2), 
-            p.total.toFixed(3)
-        ]);
-
-        doc.autoTable({
-            startY: finalY, theme: 'grid',
-            // 2. UPDATED HEADER ROW
-            head: [['#', 'ID', 'Students', 'Title', 'School', 'JS/SS', 'From', 'Avg A', 'Avg BC', 'Total']],
-            body: bodyData,
-            styles: { fontSize: 8, cellPadding: 1.5, overflow: 'linebreak' },
-            headStyles: { fillColor: [79, 70, 229], textColor: 255, halign: 'center' },
+        let row = `<tr class="hover:bg-blue-50 transition-colors">
+            <td class="font-bold text-center text-gray-500 p-2 border-r border-gray-100 sticky left-0 bg-white group-hover:bg-blue-50 z-10">${idx+1}</td>
+            <td class="font-bold text-gray-800 p-2 text-left truncate border-r border-gray-100 sticky left-10 bg-white group-hover:bg-blue-50 z-10 drop-shadow-sm" title="${item.name}">
+                ${item.name}
+            </td>`; 
             
-            // 3. UPDATED COLUMN WIDTHS (Adjusted to fit 2 new columns)
-            columnStyles: { 
-                0: {cellWidth: 8},   // # Rank
-                1: {cellWidth: 12},  // ID
-                2: {cellWidth: 40},  // Students (Reduced from 50)
-                3: {cellWidth: 45},  // Title (Reduced from 60)
-                4: {cellWidth: 30},  // School (Reduced from 40)
-                5: {cellWidth: 12},  // NEW: Grade
-                6: {cellWidth: 20}   // NEW: Region
-                // Remaining space is auto-calculated for scores
+        COMPUTED_RESULTS.allCats.forEach(c => { 
+            const pts = item.points[c] || 0; 
+            if(pts > 0) {
+                row += `<td class="text-center font-bold text-indigo-700 bg-indigo-50/50 border-r border-gray-100">${pts}</td>`;
+            } else {
+                row += `<td class="text-center text-gray-200 border-r border-gray-50">-</td>`;
             }
-        });
-        finalY = doc.lastAutoTable.finalY + 10;
-    });
-    doc.save('KSEF_Results.pdf');
+        }); 
+        
+        row += `<td class="text-right font-bold text-indigo-700 bg-indigo-50 px-3 border-l border-indigo-100">${item.total.toFixed(1)}</td>
+                <td class="text-center font-bold text-gray-800 bg-yellow-50 border-l border-yellow-100">${item.displayRank}</td>
+                </tr>`; 
+        tbody += row; 
+    }); 
+    
+    table.innerHTML = thead + tbody + "</tbody>"; 
+    
+    // 3. Append table to wrapper, then wrapper to container
+    wrapper.appendChild(table);
+    container.appendChild(wrapper); 
 }
+        // --- OPTIMIZED PDF (DATA DRIVEN, NOT DOM DRIVEN) ---
+        function generatePDF() {
+    if (!COMPUTED_RESULTS) return alert("Run Analysis First");
 
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+    const eventName = document.getElementById('eventName').value || "KSEF Results";
+
+    const img = new Image();
+    img.src = LOGO_URL;
+    img.crossOrigin = "Anonymous";
+
+    const runPrint = () => {
+        const drawHeader = (title) => {
+            if (img.complete) { try { doc.addImage(img, 'JPEG', 14, 5, 12, 12); } catch (e) {} }
+            doc.setFontSize(14); doc.setTextColor(0, 0, 0); 
+            doc.text(eventName, 30, 12);
+            doc.setFontSize(9); doc.setTextColor(100, 100, 100);
+            doc.text(`${title} | Generated: ${new Date().toLocaleString()}`, 30, 17);
+            return 25; 
+        };
+
+        let finalY = 0;
+
+        // ===========================================
+        // MATRIX VIEW (SCHOOL / REGION)
+        // ===========================================
+        if (CURRENT_REPORT_TYPE === 'school' || CURRENT_REPORT_TYPE === 'region' || CURRENT_REPORT_TYPE === 'level') {
+            const dataMap = (CURRENT_REPORT_TYPE === 'school') ? COMPUTED_RESULTS.schools : COMPUTED_RESULTS.regions;
+            const label = (CURRENT_REPORT_TYPE === 'school') ? "School" : "Region";
+            const title = `${label.toUpperCase()} RANKING MATRIX (POINTS)`;
+            
+            finalY = drawHeader(title);
+
+            const sortedItems = Object.values(dataMap).sort((a,b) => b.total - a.total);
+
+            // Generate Headers with (JS)/(SS)
+            const headers = COMPUTED_RESULTS.allCats.map(c => getCatAbbr(c));
+
+            const bodyData = sortedItems.map((item) => {
+                // Rank column (Sequential #)
+                const row = [ (sortedItems.indexOf(item) + 1), item.name ];
+                
+                // Points Data
+                COMPUTED_RESULTS.allCats.forEach(cat => {
+                    const pts = item.points[cat];
+                    row.push(pts ? pts : "-");
+                });
+                
+                // Total and Pos
+                row.push(item.total.toFixed(1)); 
+                row.push(item.displayRank); // The tie-aware rank at the end
+                return row;
+            });
+
+            doc.autoTable({
+                startY: finalY,
+                theme: 'grid',
+                // Add Pos to header
+                head: [['#', 'Name', ...headers, 'TOT', 'Pos']],
+                body: bodyData,
+                styles: { fontSize: 5, cellPadding: 0.5, valign: 'middle', halign: 'center', lineWidth: 0.1 },
+                headStyles: { fillColor: [79, 70, 229], textColor: 255, fontSize: 5, fontStyle: 'bold' },
+                columnStyles: {
+                    0: { cellWidth: 5 }, 
+                    1: { cellWidth: 25, halign: 'left' },
+                    // Total Column Highlight
+                    [headers.length + 2]: { cellWidth: 8, fontStyle: 'bold', fillColor: [240, 240, 240] },
+                    // Pos Column Highlight
+                    [headers.length + 3]: { cellWidth: 6, fontStyle: 'bold', fillColor: [255, 252, 220] } 
+                }
+            });
+        } 
+        // ===========================================
+        // PROJECT LIST VIEW
+        // ===========================================
+        else {
+            finalY = drawHeader("PROJECT RANKING REPORT");
+            
+            Object.entries(COMPUTED_RESULTS.rankedCats).forEach(([catName, projs]) => {
+                if (finalY > 180) { doc.addPage(); finalY = drawHeader("PROJECT RANKING REPORT"); }
+                
+                doc.setFontSize(10); doc.setTextColor(79, 70, 229); doc.setFont(undefined, 'bold');
+                doc.text(catName, 14, finalY); 
+                finalY += 4;
+
+                const bodyData = projs.map(p => [
+                    p.rank, // Standard #
+                    p.id, 
+                    p.students, 
+                    p.name, 
+                    p.school, 
+                    p.grade || "-", 
+                    p.region || "-", 
+                    p.avgA.toFixed(1), 
+                    p.avgBC.toFixed(1), 
+                    p.total.toFixed(2),
+                    p.displayRank // POS Column at end
+                ]);
+
+                doc.autoTable({
+                    startY: finalY, theme: 'grid',
+                    head: [['#', 'ID', 'Students', 'Project Title', 'School', 'Lvl', 'Reg', 'Av.A', 'Av.BC', 'Total', 'Pos']],
+                    body: bodyData,
+                    styles: { fontSize: 8, cellPadding: 1.5 },
+                    headStyles: { fillColor: [79, 70, 229], textColor: 255 },
+                    columnStyles: { 
+                        0: {cellWidth: 8}, 
+                        1: {cellWidth: 12}, 
+                        2: {cellWidth: 40}, 
+                        3: {cellWidth: 45}, 
+                        4: {cellWidth: 30},
+                        10: {cellWidth: 10, fontStyle: 'bold', fillColor: [255, 252, 220], halign: 'center'} // Pos col style
+                    }
+                });
+                finalY = doc.lastAutoTable.finalY + 8;
+            });
+        }
+
+        doc.save(`KSEF_${CURRENT_REPORT_TYPE.toUpperCase()}_Results.pdf`);
+    };
+
+    img.onload = runPrint;
+    img.onerror = runPrint;
+}
         // --- EXCEL EXPORT ---
         function generateExcel() {
             if(!COMPUTED_RESULTS) return alert("Run Analysis First");
@@ -3299,7 +3549,8 @@ function performSave() {
     }
     </script>
 </body>
-</html></xmp>
+</html>
+	</xmp>
 
     <script>
         // 1. The Master URL
@@ -3390,6 +3641,7 @@ function performSave() {
     </script>
 </body>
 </html>
+
 
 
 
