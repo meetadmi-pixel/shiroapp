@@ -312,12 +312,12 @@
         <div class="text-center mb-6">
             <h2 class="text-2xl font-bold text-gray-800">Results Portal</h2>
             <p class="text-sm text-slate-500">Enter Project ID to view Results</p>
-	    <p class="text-sm text-red-600 animate-pulse">❗ Use landscape mode for Mobile Phone ❗</p>
+	    <p class="text-sm text-red-600 animate-pulse">❗ USE CAPITAL LETTERS ❗</p>
         </div>
         <div class="space-y-4">
             <div>
                 <label class="text-xs font-bold text-slate-500 uppercase">Project ID</label>
-                <input type="text" id="res-pid" class="smart-input w-full text-center text-lg font-mono tracking-wider p-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 outline-none transition-all" placeholder="TYPE PROJECT ID ( IN CAPITALS e.g. A1X9)">
+                <input type="text" id="res-pid" class="smart-input w-full text-center text-lg font-mono tracking-wider p-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 outline-none transition-all" placeholder="ENTER PROJECT ID (e.g. A1X9)">
             </div>
             <button onclick="fetchResults()" class="btn-primary w-full mt-2 py-3 rounded-xl font-bold shadow-lg shadow-blue-200">View Results</button>
         </div>
@@ -1568,7 +1568,7 @@ async function handleLogin(e) {
                     const opt = document.createElement('option');
                     opt.value = JSON.stringify({ id: p.id, mode: mode });
                     // Display clearly which part is needed
-                    opt.textContent = `Project ${p.id} (${mode === 'A' ? 'Report' : 'Oral'})`;
+                    opt.textContent = `Project ${p.id} (${mode === 'A' ? 'Written Communication' : 'Oral Presentation'})`;
                     select.appendChild(opt); 
                     count++;
                 }
@@ -3641,6 +3641,7 @@ function performSave() {
     </script>
 </body>
 </html>
+
 
 
 
