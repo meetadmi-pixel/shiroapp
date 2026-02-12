@@ -299,7 +299,7 @@
             </div>
             <div class="max-w-xl mx-auto glass p-8 rounded-2xl shadow-lg">
                 <div class="flex gap-2">
-                    <input type="text" id="prog-pid" class="smart-input uppercase text-center text-lg font-mono tracking-wider" placeholder="ENTER YOUR PROJECT ID (e.g. A1X9)">
+                    <input type="text" id="prog-pid" class="smart-input text-center text-lg font-mono tracking-wider" placeholder="TYPE PROJECT ID (IN CAPITAL LETTERS e.g. A1X9)">
                     <button onclick="searchProgress()" class="btn-primary"><i class="ph ph-magnifying-glass text-xl"></i></button>
                 </div>
                 <div id="prog-result" class="hidden mt-8 border-t border-slate-200 pt-6 text-left"></div>
@@ -317,7 +317,7 @@
         <div class="space-y-4">
             <div>
                 <label class="text-xs font-bold text-slate-500 uppercase">Project ID</label>
-                <input type="text" id="res-pid" class="smart-input w-full uppercase text-center text-lg font-mono tracking-wider p-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 outline-none transition-all" placeholder="ENTER YOUR PROJECT ID (e.g. A1X9)">
+                <input type="text" id="res-pid" class="smart-input w-full text-center text-lg font-mono tracking-wider p-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 outline-none transition-all" placeholder="TYPE PROJECT ID ( IN CAPITALS e.g. A1X9)">
             </div>
             <button onclick="fetchResults()" class="btn-primary w-full mt-2 py-3 rounded-xl font-bold shadow-lg shadow-blue-200">View Results</button>
         </div>
@@ -1600,7 +1600,7 @@ async function handleLogin(e) {
             ACTIVE_PROJECT = JSON.parse(val);
             
             document.getElementById('stickyProjId').textContent = `Project ${ACTIVE_PROJECT.id}`;
-            document.getElementById('stickyPartName').textContent = ACTIVE_PROJECT.mode === 'A' ? "Part A (Report)" : "Part B/C (Oral)";
+            document.getElementById('stickyPartName').textContent = ACTIVE_PROJECT.mode === 'A' ? "Part A (Written Communication)" : "Part B/C (Oral Presentation)";
             
             document.getElementById('projectSelectorContainer').classList.add('hidden');
             document.getElementById('judgeForm').classList.remove('hidden');
@@ -3641,6 +3641,7 @@ function performSave() {
     </script>
 </body>
 </html>
+
 
 
 
