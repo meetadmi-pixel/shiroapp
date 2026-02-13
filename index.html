@@ -528,13 +528,38 @@ function loadLib(url) {
     }
 
     // --- MANUAL UPLOAD LOGIC ---
-    function updateCategories() {
+   function updateCategories() {
         const grade = document.getElementById('m-grade').value;
         const catSelect = document.getElementById('m-category');
+        
+        // Reset the dropdown
         catSelect.innerHTML = '<option value="" disabled selected>Select Category...</option>';
-        if(!grade) { catSelect.disabled = true; return; }
+        
+        if(!grade) { 
+            catSelect.disabled = true; 
+            return; 
+        }
+        
         catSelect.disabled = false;
-        STATE.categories.forEach(c => { const opt = document.createElement('option'); opt.value = c; opt.innerText = c; catSelect.appendChild(opt); });
+
+        // 1. Figure out what suffix we are looking for based on the grade
+        let filterSuffix = "";
+        if (grade.toUpperCase().includes("JS")) filterSuffix = "(JS)";
+        else if (grade.toUpperCase().includes("SS")) filterSuffix = "(SS)";
+
+        // 2. Loop through and filter the categories
+        STATE.categories.forEach(c => { 
+            // If a JS/SS grade was selected, SKIP categories that don't match the suffix
+            if (filterSuffix && !String(c).trim().endsWith(filterSuffix)) {
+                return; // Skip to the next category in the loop
+            }
+            
+            // If it matches (or if no suffix was found), add it to the dropdown
+            const opt = document.createElement('option'); 
+            opt.value = c; 
+            opt.innerText = c; 
+            catSelect.appendChild(opt); 
+        });
     }
 
     function prepareManualSubmit() {
@@ -1957,70 +1982,90 @@ function performSave() {
         }
 
         async function submitData() {
-            if(isCanvasBlank(document.getElementById('sigCanvas'))) {
-                return alert("You must sign the form before submitting.");
-            }
-            
-            const btn = document.getElementById('confirmSubmitBtn'); 
-            const originalText = btn.innerHTML;
-            btn.textContent = "Sending Data..."; 
-            btn.disabled = true;
+    if(isCanvasBlank(document.getElementById('sigCanvas'))) {
+        return alert("You must sign the form before submitting.");
+    }
+    
+    const btn = document.getElementById('confirmSubmitBtn'); 
+    const originalText = btn.innerHTML;
+    btn.textContent = "Sending Data..."; 
+    btn.disabled = true;
 
-            const answers = {};
-            document.querySelectorAll('[name^="q-"]').forEach(inp => {
-                if(inp.type === 'radio' && !inp.checked) return;
-                answers[inp.name.split('-')[1]] = inp.value;
-            });
+    const answers = {};
+    document.querySelectorAll('[name^="q-"]').forEach(inp => {
+        if(inp.type === 'radio' && !inp.checked) return;
+        answers[inp.name.split('-')[1]] = inp.value;
+    });
 
-            const payload = {
-                action: ACTIVE_PROJECT.mode === 'A' ? 'submitPartA' : 'submitPartBC',
-                data: { 
-                    projectId: ACTIVE_PROJECT.id, 
-                    judgeName: USER.name, 
-                    // New Line 987:
-		signature: document.getElementById('sigCanvas').toDataURL('image/webp', 0.5), 
-                    answers: answers 
-                }
-            };
-
-            try {
-                // Optimistic UI Update (Client Side)
-                const exist = DATA.scoreMap.find(s => s.pid === ACTIVE_PROJECT.id && s.judge === USER.name);
-                if (exist) {
-                    if (ACTIVE_PROJECT.mode === 'A') exist.hasA = true;
-                    if (ACTIVE_PROJECT.mode === 'BC') exist.hasBC = true;
-                } else {
-                    DATA.scoreMap.push({ 
-                        pid: ACTIVE_PROJECT.id, 
-                        judge: USER.name, 
-                        hasA: ACTIVE_PROJECT.mode === 'A', 
-                        hasBC: ACTIVE_PROJECT.mode === 'BC' 
-                    });
-                }
-
-                const res = await fetch(SCRIPT_URL, { method: 'POST', body: JSON.stringify(payload) });
-                const json = await res.json();
-                
-                if (json.success) {
-                    localStorage.removeItem(getDraftKey()); 
-                    closeModal(); 
-                    document.getElementById('judgeForm').classList.add('hidden');
-                    document.getElementById('successScreen').classList.remove('hidden');
-                    
-                    if (json.forcedLogout) {
-                        document.getElementById('logoutWarning').classList.remove('hidden');
-                        document.getElementById('nextProjectBtn').classList.add('hidden');
-                        setTimeout(() => { handleLogout(); }, 4000);
-                    }
-                } else { 
-                    alert(json.error); 
-                }
-            } catch (e) { 
-                alert("Submission Failed. Check internet."); 
-            }
-            btn.disabled = false; 
-            btn.innerHTML = originalText;
+    const payload = {
+        action: ACTIVE_PROJECT.mode === 'A' ? 'submitPartA' : 'submitPartBC',
+        data: { 
+            projectId: ACTIVE_PROJECT.id, 
+            judgeName: USER.name, 
+            signature: document.getElementById('sigCanvas').toDataURL('image/webp', 0.5), 
+            answers: answers 
         }
+    };
+
+    // --- OPTIMISTIC UI UPDATE ---
+    const exist = DATA.scoreMap.find(s => s.pid === ACTIVE_PROJECT.id && s.judge === USER.name);
+    if (exist) {
+        if (ACTIVE_PROJECT.mode === 'A') exist.hasA = true;
+        if (ACTIVE_PROJECT.mode === 'BC') exist.hasBC = true;
+    } else {
+        DATA.scoreMap.push({ 
+            pid: ACTIVE_PROJECT.id, 
+            judge: USER.name, 
+            hasA: ACTIVE_PROJECT.mode === 'A', 
+            hasBC: ACTIVE_PROJECT.mode === 'BC' 
+        });
+    }
+
+    // --- SMART RETRY LOGIC (Exponential Backoff) ---
+    let retries = 3;
+    let delay = 1000; // Start with 1 second delay
+    let success = false;
+
+    while (retries > 0 && !success) {
+        try {
+            const res = await fetch(SCRIPT_URL, { method: 'POST', body: JSON.stringify(payload) });
+            const json = await res.json();
+            
+            if (json.success) {
+                success = true; // Break the loop!
+                localStorage.removeItem(getDraftKey()); 
+                closeModal(); 
+                document.getElementById('judgeForm').classList.add('hidden');
+                document.getElementById('successScreen').classList.remove('hidden');
+                
+                if (json.forcedLogout) {
+                    document.getElementById('logoutWarning').classList.remove('hidden');
+                    document.getElementById('nextProjectBtn').classList.add('hidden');
+                    setTimeout(() => { handleLogout(); }, 4000);
+                }
+            } else { 
+                // The server responded, but it was a logical error (e.g., project locked)
+                alert("Server Error: " + json.error); 
+                break; // Don't retry logic errors
+            }
+        } catch (e) { 
+            // Network error (No Wi-Fi, 502, etc.)
+            retries--;
+            if (retries > 0) {
+                console.warn(`Submission failed. Retrying in ${delay}ms... (${retries} attempts left)`);
+                btn.textContent = `Retrying... (${retries})`;
+                await new Promise(r => setTimeout(r, delay));
+                delay *= 2; // Double the delay (2s, then 4s)
+            } else {
+                alert("Submission Failed after multiple attempts. Please check your internet connection and try again."); 
+            }
+        }
+    }
+
+    // Reset button state
+    btn.disabled = false; 
+    btn.innerHTML = originalText;
+}
 
         function resetUI() {
             document.getElementById('successScreen').classList.add('hidden');
@@ -2476,11 +2521,59 @@ function performSave() {
                     </div>
                 </div>
                 <div class="panel p-6 rounded-3xl"><h3 class="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4 flex items-center gap-2 border-b border-gray-100 pb-3"><i class="ph ph-calendar-check text-indigo-500 text-lg"></i> Event Details</h3><div class="space-y-4"><div class="group"><label class="block text-[10px] font-bold text-gray-400 uppercase mb-1">Official Event Name</label><input type="text" id="eventName" class="input-light w-full rounded-xl p-3 text-sm font-bold text-gray-800 focus:ring-2 focus:ring-indigo-500" placeholder="e.g. KSEF Regional Fair 2026"></div><div class="grid grid-cols-2 gap-3"><div><label class="block text-[10px] font-bold text-gray-400 uppercase mb-1">Start Date</label><input type="date" id="startDate" class="input-light w-full rounded-xl p-2 text-xs font-medium text-gray-600"></div><div><label class="block text-[10px] font-bold text-gray-400 uppercase mb-1">End Date</label><input type="date" id="endDate" class="input-light w-full rounded-xl p-2 text-xs font-medium text-gray-600"></div></div><div><label class="block text-[10px] font-bold text-gray-400 uppercase mb-1">Broadcast Message</label><textarea id="broadcast" class="input-light w-full rounded-xl p-3 text-xs font-medium text-gray-600 resize-none border-l-4 border-l-yellow-400 bg-yellow-50/50" rows="3" placeholder="Message for judges..."></textarea></div></div></div>
+<div class="panel p-6 rounded-3xl border border-red-100 shadow-sm">
+    <h3 class="text-xs font-bold text-red-500 uppercase tracking-widest mb-4 flex items-center gap-2 border-b border-red-100 pb-3">
+        <i class="ph ph-warning-circle text-lg"></i> Advanced Admin Tools
+    </h3>
+    <div class="space-y-4">
+        
+        <div class="bg-red-50 p-3 rounded-xl border border-red-200">
+            <p class="text-[10px] font-bold text-red-800 uppercase mb-1 flex justify-between">
+                <span>System Reboot</span>
+                <span class="bg-red-200 text-red-800 px-2 py-0.5 rounded text-[8px] font-mono">Quota: <span id="qReboot">Ready</span></span>
+            </p>
+            <p class="text-[9px] text-red-600 mb-2 leading-tight">Manually force clear system cache after backend sheet changes.</p>
+            <button onclick="triggerSystemReboot()" class="w-full bg-red-600 text-white text-[10px] font-bold py-2 rounded-lg shadow hover:bg-red-700 transition-all">Execute System Reboot</button>
+        </div>
+
+        <div class="bg-red-50 p-3 rounded-xl border border-red-200">
+            <p class="text-[10px] font-bold text-red-800 uppercase mb-1 flex justify-between">
+                <span>Edit / Delete Project</span>
+                <span class="bg-red-200 text-red-800 px-2 py-0.5 rounded text-[8px] font-mono">Quota: <span id="qEdit">Ready</span></span>
+            </p>
+            <div class="flex gap-2 mb-2">
+                <input type="text" id="editPid" class="input-light w-full rounded-lg p-1.5 text-xs font-bold uppercase text-center" placeholder="PROJECT ID">
+                <button onclick="searchProject()" class="bg-gray-800 text-white px-3 rounded-lg text-xs font-bold hover:bg-gray-900 transition-all">Find</button>
             </div>
+            
+            <div id="editArea" class="hidden flex-col gap-2 mt-2 pt-2 border-t border-red-200">
+                <input type="text" id="epName" class="input-light w-full rounded-md p-1.5 text-[10px] text-gray-800 font-bold" placeholder="Project Name">
+                <input type="text" id="epSchool" class="input-light w-full rounded-md p-1.5 text-[10px] text-gray-800 font-bold" placeholder="School">
+                <input type="text" id="epStd1" class="input-light w-full rounded-md p-1.5 text-[10px] text-gray-800 font-bold" placeholder="Student 1">
+                <input type="text" id="epStd2" class="input-light w-full rounded-md p-1.5 text-[10px] text-gray-800 font-bold" placeholder="Student 2">
+                <div class="flex justify-between mt-1 gap-2">
+                    <button onclick="deleteProject()" class="bg-red-600 text-white px-2 py-1.5 rounded-md text-[9px] font-bold w-1/3 hover:bg-red-700">Delete</button>
+                    <button onclick="saveProject()" class="bg-green-600 text-white px-2 py-1.5 rounded-md text-[9px] font-bold w-2/3 hover:bg-green-700">Save Changes</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-red-50 p-3 rounded-xl border border-red-200">
+            <p class="text-[10px] font-bold text-red-800 uppercase mb-1 flex justify-between">
+                <span>Print Project Tags</span>
+                <span class="bg-red-200 text-red-800 px-2 py-0.5 rounded text-[8px] font-mono">Quota: <span id="qPrint">Ready</span></span>
+            </p>
+            <p class="text-[9px] text-red-600 mb-2 leading-tight">Generate A4 cut-out tags, perfectly sorted by Category.</p>
+            <button onclick="printTags()" class="w-full bg-red-600 text-white text-[10px] font-bold py-2 rounded-lg shadow hover:bg-red-700 transition-all">Generate Print Sheet</button>
+        </div>
+
+    </div>
+</div>            
+</div>
             
             <div class="lg:col-span-8 flex flex-col gap-6">
                 <div class="panel p-6 rounded-3xl relative h-[500px] flex flex-col shadow-lg"><div class="flex justify-between items-center mb-6 border-b border-gray-100 pb-4"><div><h3 class="text-sm font-bold text-indigo-900 uppercase tracking-widest flex items-center gap-2"><span class="p-2 bg-indigo-100 text-indigo-600 rounded-lg"><i class="ph ph-chart-bar text-xl"></i></span> Detailed Progress</h3><p class="text-[10px] text-gray-400 mt-1 ml-11">Breakdown by Judge & Category</p></div><button onclick="loadGraph()" id="refreshGraphBtn" class="text-[10px] bg-white text-indigo-600 px-4 py-2 rounded-xl font-bold flex items-center gap-2 border border-gray-200 shadow-sm hover:shadow-md hover:bg-gray-50 transition-all"><i class="ph ph-arrows-clockwise text-lg"></i> Refresh Data</button></div><div id="chartContainer" class="relative w-full overflow-y-auto custom-scrollbar flex-grow bg-gray-50/50 rounded-xl border border-dashed border-gray-200 p-2"><canvas id="progressChart"></canvas></div></div>
-                <div class="panel p-6 rounded-3xl flex-grow flex flex-col"><div class="flex justify-between items-center mb-4"><h3 class="text-xs font-bold text-gray-400 uppercase tracking-widest flex items-center gap-2"><i class="ph ph-list-checks text-indigo-500 text-lg"></i> Active Categories</h3><div class="bg-gray-100 p-1 rounded-xl flex shadow-inner"><button onclick="switchTab('A')" id="tabA" class="px-5 py-2 text-xs font-bold rounded-lg bg-white text-indigo-600 shadow-sm transition-all duration-200">Part A</button><button onclick="switchTab('BC')" id="tabBC" class="px-5 py-2 text-xs font-bold rounded-lg text-gray-500 hover:text-gray-700 transition-all duration-200">Part BC</button></div></div><div id="catGrid" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 overflow-y-auto max-h-48 content-start p-1"></div></div>
+                <div class="panel p-6 rounded-3xl flex-grow flex flex-col"><div class="flex justify-between items-center mb-4"><h3 class="text-xs font-bold text-gray-400 uppercase tracking-widest flex items-center gap-2"><i class="ph ph-list-checks text-indigo-500 text-lg"></i> Active Categories</h3><div class="bg-gray-100 p-1 rounded-xl flex shadow-inner"><button onclick="switchTab('A')" id="tabA" class="px-5 py-2 text-xs font-bold rounded-lg bg-white text-indigo-600 shadow-sm transition-all duration-200">Part A</button><button onclick="switchTab('BC')" id="tabBC" class="px-5 py-2 text-xs font-bold rounded-lg text-gray-500 hover:text-gray-700 transition-all duration-200">Part BC</button></div></div><div id="catGrid" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 overflow-y-auto flex-grow content-start p-1"></div></div>
                 <div class="flex justify-end pt-2"><button onclick="saveConfig()" id="saveBtn" class="bg-indigo-600 text-white text-sm font-bold py-4 px-10 rounded-2xl shadow-xl shadow-indigo-200 hover:bg-indigo-700 hover:scale-[1.02] transition-all flex items-center gap-3"><i class="ph ph-floppy-disk text-xl"></i> Save Configuration</button></div>
             </div>
         </div>
@@ -2647,7 +2740,121 @@ function performSave() {
             } catch (e) { alert("Connection Failed. Check URL permissions!"); }
             btn.innerHTML = `<i class="ph ph-key text-xl"></i> Unlock Portal`; btn.disabled = false;
         }
+	// Function to talk to the backend
+async function sendAdminToolRequest(payload) {
+    try {
+        const res = await fetch(API_URL, { 
+            method: 'POST', 
+            body: JSON.stringify({ action: "adminTools", data: payload }) 
+        });
+        return await res.json();
+    } catch (e) {
+        alert("Network Error");
+        return { success: false, error: "Network Error" };
+    }
+}
 
+// 1. System Reboot
+async function triggerSystemReboot() {
+    if (!confirm("Are you sure you want to trigger a System Reboot? This will cost 1 Quota.")) return;
+    const res = await sendAdminToolRequest({ type: "reboot" });
+    if (res.success) {
+        alert("System Cache Cleared Successfully!");
+        document.getElementById("qReboot").innerText = res.quota;
+    } else alert(res.error);
+}
+
+// 2A. Find Project
+async function searchProject() {
+    const pid = document.getElementById("editPid").value.trim().toUpperCase();
+    if (!pid) return alert("Please enter a Project ID in CAPS");
+    
+    document.getElementById("editArea").classList.add("hidden");
+    const res = await sendAdminToolRequest({ type: "search", pid: pid });
+    
+    if (res.success) {
+        document.getElementById("epName").value = res.project.name;
+        document.getElementById("epSchool").value = res.project.school;
+        document.getElementById("epStd1").value = res.project.std1;
+        document.getElementById("epStd2").value = res.project.std2;
+        document.getElementById("editArea").classList.remove("hidden");
+    } else alert(res.error);
+}
+
+// 2B. Save Project Edits
+async function saveProject() {
+    const pid = document.getElementById("editPid").value.trim().toUpperCase();
+    if (!confirm(`Save changes to project ${pid}? This costs 1 Quota.`)) return;
+    
+    const data = {
+        name: document.getElementById("epName").value,
+        school: document.getElementById("epSchool").value,
+        std1: document.getElementById("epStd1").value,
+        std2: document.getElementById("epStd2").value
+    };
+    
+    const res = await sendAdminToolRequest({ type: "edit", pid: pid, projectData: data });
+    if (res.success) {
+        alert("Project Updated & Cache Cleared!");
+        document.getElementById("editArea").classList.add("hidden");
+        document.getElementById("qEdit").innerText = res.quota;
+    } else alert(res.error);
+}
+
+// 2C. Delete Project Entirely
+async function deleteProject() {
+    const pid = document.getElementById("editPid").value.trim().toUpperCase();
+    if (!confirm(`WARNING: Completely delete project ${pid}? This cannot be undone and costs 1 Edit Quota.`)) return;
+    
+    const res = await sendAdminToolRequest({ type: "delete", pid: pid });
+    if (res.success) {
+        alert("Project Row completely deleted & Cache Cleared!");
+        document.getElementById("editArea").classList.add("hidden");
+        document.getElementById("editPid").value = "";
+        document.getElementById("qEdit").innerText = res.quota;
+    } else alert(res.error);
+}
+
+// 3. Print Tags
+async function printTags() {
+    if (!confirm("Generate print layout? This will cost 1 Quota.")) return;
+    const res = await sendAdminToolRequest({ type: "print" });
+    
+    if (res.success) {
+        document.getElementById("qPrint").innerText = res.quota;
+        
+        // Build Print Window
+        let html = `<html><head><title>Print Project Tags</title>
+        <style>
+            body { font-family: Arial, sans-serif; margin: 0; padding: 10px; }
+            .tag { border: 2px dashed #666; padding: 20px; margin: 10px; width: 45%; display: inline-block; box-sizing: border-box; text-align: center; page-break-inside: avoid; }
+            h2 { margin: 0 0 10px 0; font-size: 16px; color: #555; text-transform: uppercase; }
+            h1 { font-size: 40px; margin: 10px 0; font-weight: 900; }
+            p { margin: 5px 0; font-size: 14px; font-weight: bold; }
+            .cut-here { color: #888; font-size: 10px; text-transform: uppercase; margin-bottom: 5px; }
+            @media print { .tag { width: 48%; margin: 1%; } }
+        </style>
+        </head><body>`;
+        
+        res.projects.forEach(p => {
+            html += `<div class="tag">
+                <div class="cut-here">✂ ----- Cut Here ----- ✂</div>
+                <h2>${res.eventName}</h2>
+                <h1>${p.id}</h1>
+                <p>${p.name}</p>
+                <p style="color: #4f46e5;">${p.school}</p>
+                <p>CATEGORY: ${p.category}</p>
+            </div>`;
+        });
+        
+        html += `</body></html>`;
+        let printWin = window.open('', '', 'width=800,height=600');
+        printWin.document.write(html);
+        printWin.document.close();
+        printWin.focus();
+        setTimeout(() => printWin.print(), 500); // Trigger standard browser print window
+    } else alert(res.error);
+}
         // --- DATA INIT ---
         async function loadData() {
             try {
@@ -3554,7 +3761,7 @@ function performSave() {
 
     <script>
         // 1. The Master URL
-        const MASTER_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwMfXrYIPg-8bb5HXcwXi-cObn6WvRXtYwu8VYsyDvd10yzCrPlhs3xfQdb5uAUp4HW/exec";
+        const MASTER_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzDtaaNT-xCPiJdxeU-NgqYbSnxZHJDJXHNXCda2QaRxIafHHGkJQE2XGj64fBEg8Zuuw/exec";
 
         // 2. NETWORK STATUS MONITORING
         function updateConnectionStatus() {
@@ -3641,10 +3848,3 @@ function performSave() {
     </script>
 </body>
 </html>
-
-
-
-
-
-
-
