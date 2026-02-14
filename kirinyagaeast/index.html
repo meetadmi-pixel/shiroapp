@@ -96,7 +96,7 @@
             <div class="inline-block p-1 rounded-2xl bg-white shadow-xl mb-6">
                 <img src="https://i.postimg.cc/mgfGYYGq/download-34.jpg" alt="Logo" class="h-24 w-24 object-cover rounded-xl">
             </div>
-            <h1 class="text-4xl md:text-5xl font-extrabold text-slate-900 mb-2">KSEF KIRINYAGA-EAST ONLINE JUDGING APP</h1>
+            <h1 class="text-4xl md:text-5xl font-extrabold text-slate-900 mb-2">KSEF KIRINYAGA EAST ONLINE JUDGING APP</h1>
             <p class="text-slate-500 font-medium">Select your role to access the portal</p>
         </div>
 
@@ -3476,18 +3476,23 @@ function generateCredentialsPDF() {
         }
 
         // --- OPTIMIZED RENDERING (PAGINATION) ---
-     function renderProjectRankings(container) {
-     const fmt = (n) => { const num = parseFloat(n); if(isNaN(num)) return "-"; return num.toFixed(3); };
-		// 1. Create the Sorted Array
+function renderProjectRankings(container) {
+    const fmt = (n) => { 
+        const num = parseFloat(n); 
+        if(isNaN(num)) return "-"; 
+        return num.toFixed(3); 
+    };
+
+    // 1. Create the Sorted Array
     const sortedCategories = Object.entries(COMPUTED_RESULTS.rankedCats)
         .sort((a, b) => a[0].localeCompare(b[0]));
 
-    // 2. USE THE SORTED ARRAY HERE (This was the missing piece)
+    // 2. Loop through sorted categories
     for (const [catName, projs] of sortedCategories) {
-	   let maxJudges = 0; 
+        let maxJudges = 0; 
         projs.forEach(p => maxJudges = Math.max(maxJudges, Object.keys(p.judges).length));
         
-        // PAGINATION
+        // PAGINATION logic
         const page = PAGINATION_STATE[catName] || 1;
         const totalPages = Math.ceil(projs.length / ITEMS_PER_PAGE);
         const start = (page - 1) * ITEMS_PER_PAGE;
@@ -3497,23 +3502,22 @@ function generateCredentialsPDF() {
         const wrapper = document.createElement('div'); 
         wrapper.className = "mb-8 bg-white border border-gray-200 rounded-2xl overflow-hidden shadow-sm overflow-x-auto";
         
+        // --- UPDATED: Dynamic Judge Headers (Only Judge X) ---
         let jHeaders = ""; 
         for(let i=1; i<=maxJudges; i++) {
-            jHeaders += `<th class="text-center bg-indigo-50/40 text-indigo-900 border-l border-indigo-100 w-16 text-[9px] p-2">J${i}<br>A</th><th class="text-center bg-indigo-50/40 text-indigo-900 w-16 text-[9px] p-2">J${i}<br>BC</th>`;
+            jHeaders += `<th class="text-center bg-indigo-50/40 text-indigo-900 border-l border-indigo-100 w-24 text-[10px] p-2 uppercase">JUDGE ${i}</th>`;
         }
         
         const rowsHtml = pagedProjs.map(p => {
             let jCells = ""; 
             const judges = Object.values(p.judges);
             for(let i=0; i<maxJudges; i++) {
+                // --- UPDATED: Only Show Score A, Ignore BC ---
                 jCells += judges[i] 
-                ? `<td class="text-center text-gray-600 border-l border-gray-50 p-2 font-mono">${fmt(judges[i].scoreA)}</td><td class="text-center text-gray-600 p-2 font-mono">${fmt(judges[i].scoreBC)}</td>` 
-                : `<td class="text-center text-gray-300 border-l border-gray-50 p-2">-</td><td class="text-center text-gray-300 p-2">-</td>`;
+                ? `<td class="text-center text-gray-600 border-l border-gray-50 p-2 font-mono">${fmt(judges[i].scoreA)}</td>` 
+                : `<td class="text-center text-gray-300 border-l border-gray-50 p-2">-</td>`;
             }
             
-            // --- UPDATED MODERATION BUTTON LOGIC ---
-            // If ENABLED: Show clickable Pencil icon
-            // If DISABLED: Show grayed-out Lock icon and disable pointer events
             const modBtn = (typeof MODERATION_ENABLED !== 'undefined' && MODERATION_ENABLED) 
                 ? `<button onclick="openModeration('${p.id}')" title="Moderate Project" class="text-gray-400 hover:text-indigo-600 p-1 transition-colors"><i class="ph ph-pencil-simple"></i></button>` 
                 : `<button disabled title="Moderation Not Available" class="text-gray-300 cursor-not-allowed p-1"><i class="ph ph-lock-key"></i></button>`;
@@ -3528,9 +3532,7 @@ function generateCredentialsPDF() {
                 <td class="p-3 text-center">${p.grade}</td>
                 <td class="p-3 text-gray-500">${p.region}</td>
                 ${jCells}
-                <td class="p-3 text-center font-bold text-gray-700 bg-gray-50/50 border-l font-mono">${fmt(p.avgA)}</td>
-                <td class="p-3 text-center font-bold text-gray-700 bg-gray-50/50 font-mono">${fmt(p.avgBC)}</td>
-                <td class="p-3 text-right font-bold text-indigo-600 bg-indigo-50/30 font-mono">${fmt(p.total)}</td>
+                <td class="p-3 text-right font-bold text-indigo-600 bg-indigo-50/30 font-mono border-l">${fmt(p.total)}</td>
                 <td class="p-3 text-center font-bold text-gray-800 bg-yellow-50 border-l border-yellow-100">${p.displayRank}</td>
                 <td class="p-3 text-center">${modBtn}</td>
             </tr>`;
@@ -3556,9 +3558,7 @@ function generateCredentialsPDF() {
                     <th class="p-3 w-12 text-center">Lvl</th>
                     <th class="p-3 w-24">Region</th>
                     ${jHeaders}
-                    <th class="p-3 w-16 text-center bg-gray-100 border-l">Avg A</th>
-                    <th class="p-3 w-16 text-center bg-gray-100">Avg BC</th>
-                    <th class="p-3 w-20 text-right bg-indigo-600 text-white">Total</th>
+                    <th class="p-3 w-28 text-right bg-indigo-600 text-white border-l">AVERAGE TOTAL</th>
                     <th class="p-3 w-12 text-center bg-yellow-100 text-yellow-800">Pos</th>
                     <th class="p-3 w-12 text-center">Act</th>
                 </tr>
@@ -3567,7 +3567,7 @@ function generateCredentialsPDF() {
         </table>`;
         
         container.appendChild(wrapper);
-     }
+    }
 }
 
         function changePage(catName, direction) {
@@ -3682,22 +3682,15 @@ function generatePDF() {
             const title = `${label.toUpperCase()} RANKING MATRIX (POINTS)`;
             
             finalY = drawHeader(title);
-
-            // Sort rows by Total Points (Highest to Lowest)
             const sortedItems = Object.values(dataMap).sort((a,b) => b.total - a.total);
-
-            // Sort Headers Alphabetically too, if you want columns A-Z
             const headers = COMPUTED_RESULTS.allCats.sort().map(c => getCatAbbr(c));
 
             const bodyData = sortedItems.map((item) => {
                 const row = [ (sortedItems.indexOf(item) + 1), item.name ];
-                
-                // Points Data
                 COMPUTED_RESULTS.allCats.forEach(cat => {
                     const pts = item.points[cat];
                     row.push(pts ? pts : "-");
                 });
-                
                 row.push((item.total || 0).toFixed(1)); 
                 row.push(item.displayRank); 
                 return row;
@@ -3719,17 +3712,15 @@ function generatePDF() {
             });
         } 
         // ===========================================
-        // PROJECT LIST VIEW (SORTED ALPHABETICALLY)
+        // PROJECT LIST VIEW (DYNAMIC JUDGE COLUMNS)
         // ===========================================
         else {
             finalY = drawHeader("PROJECT RANKING REPORT");
             
-            // --- NEW: Sort Categories Alphabetically A-Z ---
             const sortedCategories = Object.entries(COMPUTED_RESULTS.rankedCats)
                 .sort((a, b) => a[0].localeCompare(b[0]));
 
             sortedCategories.forEach(([catName, projs]) => {
-                // Check if we need a new page before starting a new category table
                 if (finalY > 170) { 
                     doc.addPage(); 
                     finalY = drawHeader("PROJECT RANKING REPORT"); 
@@ -3739,70 +3730,142 @@ function generatePDF() {
                 doc.text(catName, 14, finalY); 
                 finalY += 4;
 
-                const bodyData = projs.map(p => [
-                    p.rank, 
-                    p.id, 
-                    p.students, 
-                    p.name, 
-                    p.school, 
-                    p.grade || "-", 
-                    p.region || "-", 
-                    (p.avgA || 0).toFixed(1), 
-                    (p.avgBC || 0).toFixed(1), 
-                    (p.total || 0).toFixed(2),
-                    p.displayRank 
-                ]);
+                // Determine max judges for this category
+                let maxJudges = 0;
+                projs.forEach(p => maxJudges = Math.max(maxJudges, Object.keys(p.judges).length));
+
+                // Build Dynamic Headers
+                const judgeHeaders = [];
+                for(let i=1; i<=maxJudges; i++) { judgeHeaders.push(`JUDGE ${i}`); }
+
+                const bodyData = projs.map(p => {
+                    const baseRow = [
+                        p.rank, 
+                        p.id, 
+                        p.students, 
+                        p.name, 
+                        p.school, 
+                        p.grade || "-", 
+                        p.region || "-"
+                    ];
+
+                    // Add only Judge Score A (matching your dashboard logic)
+                    const judges = Object.values(p.judges);
+                    for(let i=0; i<maxJudges; i++) {
+                        baseRow.push(judges[i] ? parseFloat(judges[i].scoreA).toFixed(2) : "-");
+                    }
+
+                    // Add Total and Pos
+                    baseRow.push((p.total || 0).toFixed(3)); // AVERAGE TOTAL
+                    baseRow.push(p.displayRank);
+                    return baseRow;
+                });
 
                 doc.autoTable({
-                    startY: finalY, theme: 'grid',
-                    head: [['#', 'ID', 'Students', 'Project Title', 'School', 'Lvl', 'Reg', 'Av.A', 'Av.BC', 'Total', 'Pos']],
+                    startY: finalY, 
+                    theme: 'grid',
+                    head: [['#', 'ID', 'Students', 'Project Title', 'School', 'Lvl', 'Reg', ...judgeHeaders, 'AVERAGE TOTAL', 'Pos']],
                     body: bodyData,
-                    styles: { fontSize: 8, cellPadding: 1.5 },
+                    styles: { fontSize: 7, cellPadding: 1.2 },
                     headStyles: { fillColor: [79, 70, 229], textColor: 255 },
                     columnStyles: { 
-                        0: {cellWidth: 8}, 
+                        0: {cellWidth: 7}, 
                         1: {cellWidth: 12}, 
-                        2: {cellWidth: 40}, 
-                        3: {cellWidth: 45}, 
-                        4: {cellWidth: 30},
-                        10: {cellWidth: 10, fontStyle: 'bold', fillColor: [255, 252, 220], halign: 'center'} 
+                        2: {cellWidth: 35}, 
+                        3: {cellWidth: 40}, 
+                        4: {cellWidth: 25},
+                        // Dynamic index for the 'Pos' column highlight
+                        [7 + maxJudges + 1]: {cellWidth: 10, fontStyle: 'bold', fillColor: [255, 252, 220], halign: 'center'} 
                     }
                 });
                 
-                // Update finalY for the next loop
                 finalY = doc.lastAutoTable.finalY + 10;
             });
         }
 
-        doc.save(`KSEF_${CURRENT_REPORT_TYPE.toUpperCase()}_Results.pdf`);
+   // Determine the filename based on what is being displayed
+        let filename = "";
+        const safeEventName = eventName.replace(/[^a-z0-9]/gi, '_'); // Clean the event name
+
+        if (CURRENT_REPORT_TYPE === 'project') {
+            // Check how many categories are in the results
+            const catKeys = Object.keys(COMPUTED_RESULTS.rankedCats);
+            
+            if (catKeys.length === 1) {
+                // If only one category is present/selected
+                filename = `${safeEventName}_${catKeys[0]}_Results.pdf`;
+            } else {
+                // If multiple categories are present
+                filename = `${safeEventName}_Overall_Results.pdf`;
+            }
+        } else {
+            // For School or Region reports
+            filename = `${safeEventName}_${CURRENT_REPORT_TYPE.toUpperCase()}_Results.pdf`;
+        }
+
+        doc.save(filename);
     };
 
     img.onload = runPrint;
     img.onerror = runPrint;
 }
-        // --- EXCEL EXPORT ---
-        function generateExcel() {
-            if(!COMPUTED_RESULTS) return alert("Run Analysis First");
-            const wb = XLSX.utils.book_new();
-            const eventName = document.getElementById('eventName').value || "KSEF Results";
-            const limit = parseInt(document.getElementById('qualifiersCount').value) || 3;
-            
-            const pData = [[`EVENT: ${eventName}`], ["Category", "Rank", "ID", "Student Names", "Project Title", "School", "Grade", "Level", "Avg A", "Avg BC", "Total 3dp"]];
-            for (const [cat, projs] of Object.entries(COMPUTED_RESULTS.rankedCats)) {
-                projs.forEach(p => { if (p.rank <= limit) pData.push([cat, p.rank, p.id, p.students, p.name, p.school, p.grade, p.region, p.avgA, p.avgBC, p.total]); });
+       // --- EXCEL EXPORT (UPDATED) ---
+function generateExcel() {
+    if(!COMPUTED_RESULTS) return alert("Run Analysis First");
+    
+    const wb = XLSX.utils.book_new();
+    const eventName = document.getElementById('eventName').value || "KSEF Results";
+    const limit = parseInt(document.getElementById('qualifiersCount').value) || 3;
+    
+    // 1. Define Headers (Added 'School' between Project Name and Student 1)
+    const headers = ["JS or SS", "Category", "Project Name", "School", "Student 1", "Student 2", "Level"];
+    const pData = [headers]; // Start directly with headers (No EVENT row)
+
+    // 2. Loop and Build Rows
+    for (const [cat, projs] of Object.entries(COMPUTED_RESULTS.rankedCats)) {
+        projs.forEach(p => { 
+            if (p.rank <= limit) {
+                // Split Student Names by '&'
+                const sNames = p.students ? p.students.split('&') : [];
+                const s1 = sNames[0] ? sNames[0].trim() : "";
+                const s2 = sNames[1] ? sNames[1].trim() : ""; 
+
+                pData.push([
+                    p.grade,    // JS or SS
+                    cat,        // Category
+                    p.name,     // Project Name
+                    p.school,   // School (Inserted here)
+                    s1,         // Student 1
+                    s2,         // Student 2
+                    p.region    // Level
+                ]); 
             }
-            const ws1 = XLSX.utils.aoa_to_sheet(pData); XLSX.utils.book_append_sheet(wb, ws1, "Top Qualifiers");
-            
-            const sData = [[`EVENT: ${eventName}`], ["Rank", "School", "Total Points"]]; 
-            Object.values(COMPUTED_RESULTS.schools).sort((a,b)=>b.total-a.total).forEach((s,i) => sData.push([i+1, s.name, s.total])); 
-            const ws2 = XLSX.utils.aoa_to_sheet(sData); XLSX.utils.book_append_sheet(wb, ws2, "School Rank");
-            
-            const rData = [[`EVENT: ${eventName}`], ["Rank", "Level/Region", "Total Points"]]; 
-            Object.values(COMPUTED_RESULTS.regions).sort((a,b)=>b.total-a.total).forEach((r,i) => rData.push([i+1, r.name, r.total])); 
-            const ws3 = XLSX.utils.aoa_to_sheet(rData); XLSX.utils.book_append_sheet(wb, ws3, "Level Rank");
-            
-            XLSX.writeFile(wb, "KSEF_Official_Results.xlsx");
-        }
+        });
+    }
+
+    // 3. Create 'Top Qualifiers' Sheet
+    const ws1 = XLSX.utils.aoa_to_sheet(pData); 
+    XLSX.utils.book_append_sheet(wb, ws1, "Top Qualifiers");
+    
+    // 4. Secondary Sheets (Schools/Regions) - Standard
+    const sData = [["Rank", "School", "Total Points"]]; 
+    Object.values(COMPUTED_RESULTS.schools)
+        .sort((a,b) => b.total - a.total)
+        .forEach((s,i) => sData.push([i+1, s.name, s.total])); 
+    const ws2 = XLSX.utils.aoa_to_sheet(sData); 
+    XLSX.utils.book_append_sheet(wb, ws2, "School Rank");
+    
+    const rData = [["Rank", "Level/Region", "Total Points"]]; 
+    Object.values(COMPUTED_RESULTS.regions)
+        .sort((a,b) => b.total - a.total)
+        .forEach((r,i) => rData.push([i+1, r.name, r.total])); 
+    const ws3 = XLSX.utils.aoa_to_sheet(rData); 
+    XLSX.utils.book_append_sheet(wb, ws3, "Level Rank");
+    
+    // 5. Save File with Dynamic Name
+    const safeEventName = eventName.replace(/[^a-z0-9]/gi, '_').trim();
+    XLSX.writeFile(wb, `${safeEventName}_Qualifiers.xlsx`);
+}
 
         // --- MODERATION LOGIC (FIXED FOR MOBILE) ---
 
