@@ -3339,17 +3339,33 @@ function generateCredentialsPDF() {
 
     const clean = (val) => { const match = String(val).match(/-?\d+(\.\d+)?/); return match ? parseFloat(match[0]) : 0; };
 
-    res.scores.forEach(s=>{ 
-        for(const c in cats){ 
-            const p=cats[c].find(x=>x.id===s.pid); 
-            if(p){ 
-                let sa=0,sb=0; 
-                s.qScores.forEach((v,i)=>{
+    res.scores.forEach(s => { 
+        for (const c in cats) { 
+            const p = cats[c].find(x => x.id === s.pid); 
+            if (p) { 
+                let sa = 0, sb = 0; 
+                s.qScores.forEach((v, i) => {
                     const numVal = clean(v);
-                    if(i < res.questions.filter(q=>q.part.includes('A') && !q.part.includes('ORAL')).length) sa+=numVal;
-                    else sb+=numVal;
+                    if (numVal === 0) return; // Skip text/blanks
+
+                    // Match the score to the specific Question Row
+                    const qDef = res.questions[i];
+                    if (!qDef) return;
+
+                    // 1. Check if this question belongs to the Project's Category
+                    // Uses your pipe (|) separation logic
+                    const qCats = qDef.category.split('|').map(item => item.trim());
+                    if (!qCats.includes(p.category)) return;
+
+                    // 2. Sort into buckets based on your Column B labels (A, B, or C)
+                    // Part A goes to 'sa', everything else (B or C) goes to 'sb'
+                    if (qDef.part === 'A') {
+                        sa += numVal;
+                    } else {
+                        sb += numVal;
+                    }
                 }); 
-                p.judges[s.judge]={scoreA:sa,scoreBC:sb}; 
+                p.judges[s.judge] = { scoreA: sa, scoreBC: sb }; 
             } 
         } 
     });
