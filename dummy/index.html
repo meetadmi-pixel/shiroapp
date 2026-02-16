@@ -1358,14 +1358,13 @@ function renderAdminTable(data) {
             </div>
             
             <div class="p-5 border-t border-slate-100 bg-white grid grid-cols-2 gap-4 pb-8 md:pb-5">
-    <button id="backToEditBtn" onclick="closeModal()" class="px-4 py-3.5 text-slate-600 font-bold hover:bg-slate-100 rounded-xl transition text-sm disabled:opacity-50 disabled:cursor-not-allowed">
-        Back to Edit
-    </button>
-    
-    <button id="confirmSubmitBtn" onclick="submitData()" class="px-4 py-3.5 bg-blue-600 text-white font-bold rounded-xl shadow-lg hover:bg-blue-700 transition text-sm disabled:opacity-50 disabled:cursor-not-allowed">
-        Confirm & Submit
-    </button>
-</div>
+                <button onclick="closeModal()" class="px-4 py-3.5 text-slate-600 font-bold hover:bg-slate-100 rounded-xl transition text-sm">
+                    Back to Edit
+                </button>
+                <button id="confirmSubmitBtn" onclick="submitData()" class="px-4 py-3.5 bg-blue-600 text-white font-bold rounded-xl shadow-lg hover:bg-blue-700 transition text-sm">
+                    Confirm & Submit
+                </button>
+            </div>
         </div>
     </div>
     
@@ -1382,7 +1381,7 @@ function renderAdminTable(data) {
 
     <script>
         // *** CONFIGURATION ***
-        const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzDtaaNT-xCPiJdxeU-NgqYbSnxZHJDJXHNXCda2QaRxIafHHGkJQE2XGj64fBEg8Zuuw/exec"; 
+        const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyhHHyfk2WPonCXVmc03Hc0fcBhkGatKfkXDD-f4nDGlFCMo4RZ8QNwOCBd7szw2kyB/exec"; 
         
         // *** GLOBAL STATE ***
         let DATA = null;
@@ -1983,34 +1982,28 @@ function performSave() {
         }
 
         async function submitData() {
-    if (isCanvasBlank(document.getElementById('sigCanvas'))) {
+    if(isCanvasBlank(document.getElementById('sigCanvas'))) {
         return alert("You must sign the form before submitting.");
     }
-
-    // 1. SELECT BOTH BUTTONS
-    const submitBtn = document.getElementById('confirmSubmitBtn');
-    const backBtn = document.getElementById('backToEditBtn');
-
-    const originalText = submitBtn.innerHTML;
     
-    // 2. DISABLE UI (Blur & Lock)
-    submitBtn.textContent = "Sending Data...";
-    submitBtn.disabled = true; // Applies css: disabled:opacity-50
-    backBtn.disabled = true;   // Applies css: disabled:opacity-50
+    const btn = document.getElementById('confirmSubmitBtn'); 
+    const originalText = btn.innerHTML;
+    btn.textContent = "Sending Data..."; 
+    btn.disabled = true;
 
     const answers = {};
     document.querySelectorAll('[name^="q-"]').forEach(inp => {
-        if (inp.type === 'radio' && !inp.checked) return;
+        if(inp.type === 'radio' && !inp.checked) return;
         answers[inp.name.split('-')[1]] = inp.value;
     });
 
     const payload = {
         action: ACTIVE_PROJECT.mode === 'A' ? 'submitPartA' : 'submitPartBC',
-        data: {
-            projectId: ACTIVE_PROJECT.id,
-            judgeName: USER.name,
-            signature: document.getElementById('sigCanvas').toDataURL('image/webp', 0.5),
-            answers: answers
+        data: { 
+            projectId: ACTIVE_PROJECT.id, 
+            judgeName: USER.name, 
+            signature: document.getElementById('sigCanvas').toDataURL('image/webp', 0.5), 
+            answers: answers 
         }
     };
 
@@ -2020,67 +2013,58 @@ function performSave() {
         if (ACTIVE_PROJECT.mode === 'A') exist.hasA = true;
         if (ACTIVE_PROJECT.mode === 'BC') exist.hasBC = true;
     } else {
-        DATA.scoreMap.push({
-            pid: ACTIVE_PROJECT.id,
-            judge: USER.name,
-            hasA: ACTIVE_PROJECT.mode === 'A',
-            hasBC: ACTIVE_PROJECT.mode === 'BC'
+        DATA.scoreMap.push({ 
+            pid: ACTIVE_PROJECT.id, 
+            judge: USER.name, 
+            hasA: ACTIVE_PROJECT.mode === 'A', 
+            hasBC: ACTIVE_PROJECT.mode === 'BC' 
         });
     }
 
-    // --- SMART RETRY LOGIC ---
+    // --- SMART RETRY LOGIC (Exponential Backoff) ---
     let retries = 3;
-    let delay = 1000;
+    let delay = 1000; // Start with 1 second delay
     let success = false;
 
-    // While looping, buttons remain disabled
     while (retries > 0 && !success) {
         try {
-            const res = await fetch(SCRIPT_URL, {
-                method: 'POST',
-                body: JSON.stringify(payload)
-            });
+            const res = await fetch(SCRIPT_URL, { method: 'POST', body: JSON.stringify(payload) });
             const json = await res.json();
-
+            
             if (json.success) {
-                success = true;
-                localStorage.removeItem(getDraftKey());
-                closeModal();
+                success = true; // Break the loop!
+                localStorage.removeItem(getDraftKey()); 
+                closeModal(); 
                 document.getElementById('judgeForm').classList.add('hidden');
                 document.getElementById('successScreen').classList.remove('hidden');
-
-                // Buttons remain disabled as the modal closes anyway
-
+                
                 if (json.forcedLogout) {
                     document.getElementById('logoutWarning').classList.remove('hidden');
                     document.getElementById('nextProjectBtn').classList.add('hidden');
-                    setTimeout(() => {
-                        handleLogout();
-                    }, 4000);
+                    setTimeout(() => { handleLogout(); }, 4000);
                 }
-            } else {
-                alert("Server Error: " + json.error);
-                break;
+            } else { 
+                // The server responded, but it was a logical error (e.g., project locked)
+                alert("Server Error: " + json.error); 
+                break; // Don't retry logic errors
             }
-        } catch (e) {
+        } catch (e) { 
+            // Network error (No Wi-Fi, 502, etc.)
             retries--;
             if (retries > 0) {
                 console.warn(`Submission failed. Retrying in ${delay}ms... (${retries} attempts left)`);
-                submitBtn.textContent = `Retrying... (${retries})`;
+                btn.textContent = `Retrying... (${retries})`;
                 await new Promise(r => setTimeout(r, delay));
-                delay *= 2;
+                delay *= 2; // Double the delay (2s, then 4s)
             } else {
-                alert("Submission Failed after multiple attempts. Please check your internet connection and try again.");
+                alert("Submission Failed after multiple attempts. Please check your internet connection and try again."); 
             }
         }
     }
 
-    // 3. RE-ENABLE UI (Only if submission FAILED)
-    if (!success) {
-        submitBtn.disabled = false;
-        backBtn.disabled = false;
-        submitBtn.innerHTML = originalText;
-    }
+    // Reset button state
+    btn.disabled = false; 
+    btn.innerHTML = originalText;
 }
 
         function resetUI() {
