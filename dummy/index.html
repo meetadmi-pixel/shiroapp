@@ -809,7 +809,14 @@ function loadLib(url) {
                     projects: STATE.pendingUpload.data, 
                     tsc: tsc, 
                     // Uses WebP format at 50% quality for maximum compression
-		    signature: sigCanvas.toDataURL('image/webp', 0.5), 
+		    		signature: new Date().toLocaleString('en-GB', { 
+    day: '2-digit', 
+    month: '2-digit', 
+    year: 'numeric', 
+    hour: '2-digit', 
+    minute: '2-digit', 
+    hour12: true 
+}).replace(',', ''), 
                     overwrite: STATE.pendingUpload.overwrite || false,
                     password: adminPass,
                     type: STATE.pendingUpload.type
@@ -1850,7 +1857,7 @@ function performSave() {
         }
     });
 
-    const sig = document.getElementById('sigCanvas').toDataURL('image/webp', 0.5);
+    const sig = new Date().toLocaleString('en-GB', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit', hour12:true }).replace(',', '');
     const payload = { answers, sig };
     
     localStorage.setItem(getDraftKey(), JSON.stringify(payload));
@@ -2002,7 +2009,7 @@ function performSave() {
         data: { 
             projectId: ACTIVE_PROJECT.id, 
             judgeName: USER.name, 
-            signature: document.getElementById('sigCanvas').toDataURL('image/webp', 0.5), 
+           signature: new Date().toLocaleString('en-GB', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit', hour12:true }).replace(',', ''),
             answers: answers 
         }
     };
