@@ -809,7 +809,14 @@ function loadLib(url) {
                     projects: STATE.pendingUpload.data, 
                     tsc: tsc, 
                     // Uses WebP format at 50% quality for maximum compression
-		    signature: sigCanvas.toDataURL('image/webp', 0.5), 
+		    		signature: new Date().toLocaleString('en-GB', { 
+    day: '2-digit', 
+    month: '2-digit', 
+    year: 'numeric', 
+    hour: '2-digit', 
+    minute: '2-digit', 
+    hour12: true 
+}).replace(',', ''), 
                     overwrite: STATE.pendingUpload.overwrite || false,
                     password: adminPass,
                     type: STATE.pendingUpload.type
@@ -1850,7 +1857,7 @@ function performSave() {
         }
     });
 
-    const sig = document.getElementById('sigCanvas').toDataURL('image/webp', 0.5);
+    const sig = new Date().toLocaleString('en-GB', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit', hour12:true }).replace(',', '');
     const payload = { answers, sig };
     
     localStorage.setItem(getDraftKey(), JSON.stringify(payload));
@@ -2002,7 +2009,7 @@ function performSave() {
         data: { 
             projectId: ACTIVE_PROJECT.id, 
             judgeName: USER.name, 
-            signature: document.getElementById('sigCanvas').toDataURL('image/webp', 0.5), 
+           signature: new Date().toLocaleString('en-GB', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit', hour12:true }).replace(',', ''),
             answers: answers 
         }
     };
@@ -3332,17 +3339,33 @@ function generateCredentialsPDF() {
 
     const clean = (val) => { const match = String(val).match(/-?\d+(\.\d+)?/); return match ? parseFloat(match[0]) : 0; };
 
-    res.scores.forEach(s=>{ 
-        for(const c in cats){ 
-            const p=cats[c].find(x=>x.id===s.pid); 
-            if(p){ 
-                let sa=0,sb=0; 
-                s.qScores.forEach((v,i)=>{
+    res.scores.forEach(s => { 
+        for (const c in cats) { 
+            const p = cats[c].find(x => x.id === s.pid); 
+            if (p) { 
+                let sa = 0, sb = 0; 
+                s.qScores.forEach((v, i) => {
                     const numVal = clean(v);
-                    if(i < res.questions.filter(q=>q.part.includes('A') && !q.part.includes('ORAL')).length) sa+=numVal;
-                    else sb+=numVal;
+                    if (numVal === 0) return; // Skip text/blanks
+
+                    // Match the score to the specific Question Row
+                    const qDef = res.questions[i];
+                    if (!qDef) return;
+
+                    // 1. Check if this question belongs to the Project's Category
+                    // Uses your pipe (|) separation logic
+                    const qCats = qDef.category.split('|').map(item => item.trim());
+                    if (!qCats.includes(p.category)) return;
+
+                    // 2. Sort into buckets based on your Column B labels (A, B, or C)
+                    // Part A goes to 'sa', everything else (B or C) goes to 'sb'
+                    if (qDef.part === 'A') {
+                        sa += numVal;
+                    } else {
+                        sb += numVal;
+                    }
                 }); 
-                p.judges[s.judge]={scoreA:sa,scoreBC:sb}; 
+                p.judges[s.judge] = { scoreA: sa, scoreBC: sb }; 
             } 
         } 
     });
@@ -3502,21 +3525,44 @@ function renderProjectRankings(container) {
         const wrapper = document.createElement('div'); 
         wrapper.className = "mb-8 bg-white border border-gray-200 rounded-2xl overflow-hidden shadow-sm overflow-x-auto";
         
-        // --- UPDATED: Dynamic Judge Headers (Only Judge X) ---
-        let jHeaders = ""; 
-        for(let i=1; i<=maxJudges; i++) {
-            jHeaders += `<th class="text-center bg-indigo-50/40 text-indigo-900 border-l border-indigo-100 w-24 text-[10px] p-2 uppercase">JUDGE ${i}</th>`;
-        }
+        // --- UPDATED: Dynamic Judge Headers (Shows A and BC per Judge) ---
+// --- Level 1: Judge Groups ---
+let jHeaders = ""; 
+// --- Level 2: Sub-labels (A, BC, TOTAL) ---
+let subHeaders = ""; 
+
+for(let i=1; i<=maxJudges; i++) {
+    // Spans 3 columns for A, BC, and the Judge's Total
+    jHeaders += `<th colspan="3" class="text-center bg-indigo-50/60 text-indigo-900 border-l border-indigo-100 text-[10px] p-1 uppercase">JUDGE ${i}</th>`;
+    
+    subHeaders += `
+        <th class="text-center bg-white text-gray-400 border-l border-gray-100 text-[9px] p-1">A</th>
+        <th class="text-center bg-white text-gray-400 border-l border-gray-100 text-[9px] p-1">BC</th>
+        <th class="text-center bg-indigo-50/50 text-indigo-700 border-l border-indigo-100 text-[9px] p-1 font-bold">TOTAL</th>
+    `;
+}
         
         const rowsHtml = pagedProjs.map(p => {
-            let jCells = ""; 
-            const judges = Object.values(p.judges);
-            for(let i=0; i<maxJudges; i++) {
-                // --- UPDATED: Only Show Score A, Ignore BC ---
-                jCells += judges[i] 
-                ? `<td class="text-center text-gray-600 border-l border-gray-50 p-2 font-mono">${fmt(judges[i].scoreA)}</td>` 
-                : `<td class="text-center text-gray-300 border-l border-gray-50 p-2">-</td>`;
-            }
+          let jCells = ""; 
+const judgeData = Object.values(p.judges); 
+
+for(let i=0; i<maxJudges; i++) {
+    const jd = judgeData[i];
+    if(jd) {
+        jCells += `
+            <td class="text-center text-gray-500 border-l border-gray-50 p-1 font-mono text-[10px]">${fmt(jd.scoreA)}</td>
+            <td class="text-center text-gray-500 border-l border-gray-50 p-1 font-mono text-[10px]">${fmt(jd.scoreBC)}</td>
+            <td class="text-center text-indigo-600 border-l border-indigo-100 p-1 font-bold font-mono text-[10px] bg-indigo-50/10">${fmt(jd.scoreA + jd.scoreBC)}</td>
+        `;
+    } else {
+        // Placeholder for missing judge data
+        jCells += `
+            <td class="text-center text-gray-200 border-l border-gray-50 p-1">-</td>
+            <td class="text-center text-gray-200 border-l border-gray-50 p-1">-</td>
+            <td class="text-center text-gray-200 border-l border-indigo-50 p-1 bg-gray-50/30">-</td>
+        `;
+    }
+}
             
             const modBtn = (typeof MODERATION_ENABLED !== 'undefined' && MODERATION_ENABLED) 
                 ? `<button onclick="openModeration('${p.id}')" title="Moderate Project" class="text-gray-400 hover:text-indigo-600 p-1 transition-colors"><i class="ph ph-pencil-simple"></i></button>` 
@@ -3549,20 +3595,23 @@ function renderProjectRankings(container) {
         </div>
         <table class="w-full text-left border-collapse">
             <thead>
-                <tr class="bg-gray-50 text-xs text-gray-500 font-bold border-b border-gray-200 uppercase tracking-wider">
-                    <th class="p-3 w-10 text-center">#</th>
-                    <th class="p-3 w-20">ID</th>
-                    <th class="p-3 w-48">Students</th>
-                    <th class="p-3 w-64">Title</th>
-                    <th class="p-3 w-32">School</th>
-                    <th class="p-3 w-12 text-center">Lvl</th>
-                    <th class="p-3 w-24">Region</th>
-                    ${jHeaders}
-                    <th class="p-3 w-28 text-right bg-indigo-600 text-white border-l">AVERAGE TOTAL</th>
-                    <th class="p-3 w-12 text-center bg-yellow-100 text-yellow-800">Pos</th>
-                    <th class="p-3 w-12 text-center">Act</th>
-                </tr>
-            </thead>
+    <tr class="bg-gray-50 text-[10px] text-gray-500 font-bold border-b border-gray-200 uppercase tracking-wider">
+        <th rowspan="2" class="p-3 w-10 text-center">#</th>
+        <th rowspan="2" class="p-3 w-20 border-l">ID</th>
+        <th rowspan="2" class="p-3 w-48 border-l">Students</th>
+        <th rowspan="2" class="p-3 w-64 border-l">Title</th>
+        <th rowspan="2" class="p-3 w-32 border-l">School</th>
+        <th rowspan="2" class="p-3 w-12 text-center border-l">Lvl</th>
+        <th rowspan="2" class="p-3 w-24 border-l">Region</th>
+        ${jHeaders}
+        <th rowspan="2" class="p-3 w-28 text-right bg-indigo-600 text-white border-l">AVG TOTAL</th>
+        <th rowspan="2" class="p-3 w-12 text-center bg-yellow-100 text-yellow-800 border-l">Pos</th>
+        <th rowspan="2" class="p-3 w-12 text-center border-l">Act</th>
+    </tr>
+    <tr class="bg-gray-50 border-b border-gray-200">
+        ${subHeaders}
+    </tr>
+</thead>
             <tbody class="divide-y divide-gray-50">${rowsHtml}</tbody>
         </table>`;
         
@@ -3712,7 +3761,7 @@ function generatePDF() {
             });
         } 
         // ===========================================
-        // PROJECT LIST VIEW (DYNAMIC JUDGE COLUMNS)
+        // PROJECT LIST VIEW (A, BC, TOTAL PER JUDGE)
         // ===========================================
         else {
             finalY = drawHeader("PROJECT RANKING REPORT");
@@ -3730,59 +3779,103 @@ function generatePDF() {
                 doc.text(catName, 14, finalY); 
                 finalY += 4;
 
-                // Determine max judges for this category
                 let maxJudges = 0;
                 projs.forEach(p => maxJudges = Math.max(maxJudges, Object.keys(p.judges).length));
 
-                // Build Dynamic Headers
+                // 1. Build Headers (Shortened labels to save width)
                 const judgeHeaders = [];
-                for(let i=1; i<=maxJudges; i++) { judgeHeaders.push(`JUDGE ${i}`); }
+                for(let i=1; i<=maxJudges; i++) { 
+                    judgeHeaders.push(`J${i} A`, `J${i} BC`, `J${i} TOT`); 
+                }
 
-                const bodyData = projs.map(p => {
-                    const baseRow = [
-                        p.rank, 
-                        p.id, 
-                        p.students, 
-                        p.name, 
-                        p.school, 
-                        p.grade || "-", 
-                        p.region || "-"
-                    ];
+                // 2. Map Data with 3 d.p. for ALL Marks
+const bodyData = projs.map(p => {
+    const baseRow = [
+        p.rank, 
+        p.id, 
+        p.students, 
+        p.name, 
+        p.school, 
+        p.grade || "-", 
+        p.region || "-"
+    ];
 
-                    // Add only Judge Score A (matching your dashboard logic)
-                    const judges = Object.values(p.judges);
-                    for(let i=0; i<maxJudges; i++) {
-                        baseRow.push(judges[i] ? parseFloat(judges[i].scoreA).toFixed(2) : "-");
-                    }
+    const judges = Object.values(p.judges);
+    for(let i=0; i<maxJudges; i++) {
+        if(judges[i]) {
+            // Updated to 3 d.p. for every judge component
+            baseRow.push(
+                parseFloat(judges[i].scoreA).toFixed(3),
+                parseFloat(judges[i].scoreBC).toFixed(3),
+                (parseFloat(judges[i].scoreA) + parseFloat(judges[i].scoreBC)).toFixed(3)
+            );
+        } else {
+            baseRow.push("-", "-", "-");
+        }
+    }
+    // Final Average Total in 3 d.p.
+    baseRow.push((p.total || 0).toFixed(3)); 
+    baseRow.push(p.displayRank);
+    return baseRow;
+});
 
-                    // Add Total and Pos
-                    baseRow.push((p.total || 0).toFixed(3)); // AVERAGE TOTAL
-                    baseRow.push(p.displayRank);
-                    return baseRow;
-                });
+// 3. AutoTable Configuration
+doc.autoTable({
+    startY: finalY, 
+    theme: 'grid',
+    head: [['#', 'ID', 'Students', 'Project Title', 'School', 'Lvl', 'Reg', ...judgeHeaders, 'AVG TOTAL', 'Pos']],
+    body: bodyData,
+    styles: { 
+        fontSize: maxJudges > 3 ? 4.5 : 5.5, // Even smaller font to fit 3 d.p. width
+        cellPadding: 0.4, 
+        overflow: 'linebreak', 
+        lineWidth: 0.1,
+        valign: 'middle',
+        halign: 'center'
+    },
+    headStyles: { fillColor: [79, 70, 229], fontSize: 4.5 },
+    columnStyles: { 
+        0: {cellWidth: 5}, 
+        1: {cellWidth: 10}, 
+        2: {cellWidth: 25}, 
+        3: {cellWidth: 32}, 
+        4: {cellWidth: 20},
+        5: {cellWidth: 6},
+        6: {cellWidth: 12},
+        // Calculate the position of the AVG TOTAL column
+        [7 + (maxJudges * 3)]: {cellWidth: 14, fontStyle: 'bold', halign: 'right', fillColor: [235, 235, 255]},
+        [7 + (maxJudges * 3) + 1]: {cellWidth: 7, fontStyle: 'bold'} 
+    },
+                didParseCell: function(data) {
+                        const rowIndex = data.row.index;
+                        const project = projs[rowIndex];
+                        
+                        // 1. HIGHLIGHT TOP 3 RANKS
+                        if (data.section === 'body') {
+                            if (project.displayRank === 1) {
+                                data.cell.styles.fillColor = [255, 239, 186]; // Light Gold
+                            } else if (project.displayRank === 2) {
+                                data.cell.styles.fillColor = [235, 235, 235]; // Light Silver
+                            } else if (project.displayRank === 3) {
+                                data.cell.styles.fillColor = [250, 225, 210]; // Light Bronze
+                            }
+                        }
 
-                doc.autoTable({
-                    startY: finalY, 
-                    theme: 'grid',
-                    head: [['#', 'ID', 'Students', 'Project Title', 'School', 'Lvl', 'Reg', ...judgeHeaders, 'AVERAGE TOTAL', 'Pos']],
-                    body: bodyData,
-                    styles: { fontSize: 7, cellPadding: 1.2 },
-                    headStyles: { fillColor: [79, 70, 229], textColor: 255 },
-                    columnStyles: { 
-                        0: {cellWidth: 7}, 
-                        1: {cellWidth: 12}, 
-                        2: {cellWidth: 35}, 
-                        3: {cellWidth: 40}, 
-                        4: {cellWidth: 25},
-                        // Dynamic index for the 'Pos' column highlight
-                        [7 + maxJudges + 1]: {cellWidth: 10, fontStyle: 'bold', fillColor: [255, 252, 220], halign: 'center'} 
+                        // 2. OVERRIDE: Shading for Judge Totals (If not a top rank)
+                        if (data.section === 'body' && project.displayRank > 3) {
+                            if (data.column.index > 6 && (data.column.index - 6) % 3 === 0 && data.column.index < (7 + maxJudges * 3)) {
+                                data.cell.styles.fillColor = [245, 245, 245];
+                            }
+                            if (data.column.index === (7 + maxJudges * 3)) {
+                                data.cell.styles.fillColor = [235, 235, 255];
+                            }
+                        }
                     }
                 });
                 
                 finalY = doc.lastAutoTable.finalY + 10;
             });
         }
-
    // Determine the filename based on what is being displayed
         let filename = "";
         const safeEventName = eventName.replace(/[^a-z0-9]/gi, '_'); // Clean the event name
