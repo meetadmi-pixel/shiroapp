@@ -1777,35 +1777,65 @@ async function handleLogin(e) {
          * 5. SMART GUIDE LOGIC
          */
         function updateInterpretation(radio, qId) {
-            clearError(qId);
+    // 1. Clear previous errors
+    clearError(qId);
+    
+    // 2. Get the Guide Box
+    const guideDiv = document.getElementById(`guide-${qId}`);
+    if (!guideDiv) return;
+
+    // 3. Get the value safely
+    // We treat everything as a string first to avoid "0" being false
+    const val = String(radio.value).trim();
+    const raw = guideDiv.dataset.raw;
+    
+    if (!raw) return;
+
+    const parts = raw.split('|');
+    let foundText = "";
+
+    // 4. Robust Matching Loop
+    for (let part of parts) {
+        const firstColonIndex = part.indexOf(':');
+        
+        if (firstColonIndex > -1) {
+            // Get Key and Value
+            const scoreKey = part.substring(0, firstColonIndex).trim();
+            const explanation = part.substring(firstColonIndex + 1).trim();
             
-            const guideDiv = document.getElementById(`guide-${qId}`);
-            if (!guideDiv) return;
-
-            const val = radio.value.trim();
-            const raw = guideDiv.dataset.raw;
-            const parts = raw.split('|');
-            let foundText = "";
-
-            for (let part of parts) {
-                const firstColonIndex = part.indexOf(':');
-                if (firstColonIndex > -1) {
-                    const scoreKey = part.substring(0, firstColonIndex).trim();
-                    const explanation = part.substring(firstColonIndex + 1).trim();
-                    if (scoreKey === val) { 
-                        foundText = explanation; 
-                        break; 
-                    }
+            // CHECK A: Exact String Match (e.g. "0" == "0")
+            if (scoreKey === val) { 
+                foundText = explanation; 
+                break; 
+            }
+            
+            // CHECK B: Numeric Match (e.g. "0" == "0.0")
+            // This fixes the issue where radio is "0" but text is "0.0"
+            const numKey = parseFloat(scoreKey);
+            const numVal = parseFloat(val);
+            
+            // We check !isNaN to ensure we don't match text like "Yes" == "No" (both NaN)
+            if (!isNaN(numKey) && !isNaN(numVal)) {
+                // Use a tiny epsilon for float comparison safety, or simple equality
+                if (Math.abs(numKey - numVal) < 0.001) {
+                    foundText = explanation;
+                    break;
                 }
             }
-
-            if (foundText) {
-                guideDiv.innerHTML = `<span class="block text-indigo-600 font-bold mb-1 uppercase text-[10px]"> rubric Interpretation:</span>${foundText}`;
-                guideDiv.classList.add('active');
-            } else {
-                guideDiv.classList.remove('active');
-            }
         }
+    }
+
+    // 5. Update the Display
+    if (foundText) {
+        guideDiv.innerHTML = `<span class="block text-indigo-600 font-bold mb-1 uppercase text-[10px]"> Rubric Interpretation:</span>${foundText}`;
+        // Force the class addition
+        guideDiv.classList.remove('hidden'); 
+        guideDiv.classList.add('active');
+        guideDiv.style.display = 'block'; // Failsafe
+    } else {
+        guideDiv.classList.remove('active');
+    }
+}
 
         function clearError(qId) {
             const card = document.getElementById(`card-${qId}`);
@@ -1935,24 +1965,29 @@ function performSave() {
                 
                 if(inp) val = (inp.tagName === 'INPUT') ? inp.value : inp.value.trim();
 
-                // *** STRICT VALIDATION LOGIC (15 Chars) ***
-                let isInvalid = false;
-                
-                if (req && !val) {
-                    isInvalid = true;
-                }
-                
-                if (req && inp && (inp.tagName === 'TEXTAREA' || inp.type === 'textarea')) {
-                      if (val.length < 15) isInvalid = true;
-                }
+               // *** UPDATED VALIDATION LOGIC (Removed 15 char limit) ***
+let isInvalid = false;
 
-                const splitStr = card.querySelector('[id^="str-"]');
-                const splitRec = card.querySelector('[id^="rec-"]');
-                if (splitStr && splitRec) {
-                    if (splitStr.value.trim().length < 15 || splitRec.value.trim().length < 15) {
-                        isInvalid = true;
-                    }
-                }
+// 1. Basic check: Is it required and empty?
+if (req && !val) {
+    isInvalid = true;
+}
+
+// 2. Standard Textareas (Removed length < 15 check)
+if (req && inp && (inp.tagName === 'TEXTAREA' || inp.type === 'textarea')) {
+      if (val.trim().length === 0) isInvalid = true; // Only check if empty
+}
+
+const splitStr = card.querySelector('[id^="str-"]');
+const splitRec = card.querySelector('[id^="rec-"]');
+
+// 3. Split Fields (Strength/Recs)
+if (splitStr && splitRec) {
+    // Check if either is empty, but ignore length
+    if (splitStr.value.trim().length === 0 || splitRec.value.trim().length === 0) {
+        isInvalid = true;
+    }
+}
 
                 if (isInvalid) { 
                     card.classList.add('error-ring'); 
@@ -2936,7 +2971,7 @@ async function printTags() {
                 const html = '<option value="ALL">All Categories</option>' + ALL_CATS.map(c => `<option value="${c}">${c}</option>`).join('');
                 catSel.innerHTML = html; jCatSel.innerHTML = '<option value="">Select Category...</option>' + ALL_CATS.map(c => `<option value="${c}">${c}</option>`).join('');
 
-                renderCategories(); renderJudges(); loadGraph();
+                renderCategories(); renderJudges();
             } catch(e) { console.error(e); alert("Failed to load data."); }
         }
 
@@ -3141,18 +3176,94 @@ async function loadGraph() {
     }
     btn.innerHTML = `<i class="ph ph-arrows-clockwise"></i> Refresh Data`;
 }
-        // --- JUDGE MANAGEMENT ---
-        function autoGenCreds() { const n = document.getElementById('jName').value.trim(); if(!n) return; document.getElementById('jUser').value = n.split(' ')[0].toLowerCase() + Math.floor(Math.random()*100); document.getElementById('jPass').value = Math.random().toString(36).slice(-5).toUpperCase(); }
-        
-        async function addJudge() {
-            const btn = document.getElementById('btnAddJudge');
-            const data = { name: document.getElementById('jName').value, username: document.getElementById('jUser').value, password: document.getElementById('jPass').value, category: document.getElementById('jCat').value };
-            if(!data.name || !data.category || data.category === "") { return alert("Please enter Full Name and select a Category."); }
-            btn.innerHTML = `<i class="ph ph-spinner animate-spin"></i> Creating Account...`; btn.disabled = true;
-            await fetch(API_URL, { method: 'POST', mode: 'no-cors', body: JSON.stringify({ action: "addJudge", data: data }) });
-            document.getElementById('jName').value=""; autoGenCreds(); await loadData(); 
-            btn.innerHTML = `<i class="ph ph-check-circle text-lg"></i> Account Created!`; setTimeout(() => { btn.innerHTML = `<i class="ph ph-check-circle text-lg"></i> Create Account`; btn.disabled = false; }, 2000);
-        }
+       // --- JUDGE MANAGEMENT ---
+function autoGenCreds() { 
+    const n = document.getElementById('jName').value.trim(); 
+    if(!n) {
+        // Clear fields if name is empty
+        document.getElementById('jUser').value = "";
+        document.getElementById('jPass').value = "";
+        return;
+    } 
+
+    // 1. Clean the name: Remove spaces/symbols, keep only letters, make CAPS
+    const cleanName = n.replace(/[^a-zA-Z]/g, '').toUpperCase();
+
+    // 2. Get Prefix: Take the first 3 letters (or less if name is short)
+    const prefix = cleanName.substring(0, 3);
+
+    // 3. Generate Random Number: 10 to 99 (2 digits)
+    const rand = Math.floor(Math.random() * 90 + 10);
+
+    // 4. Combine & Limit: Ensure it is strictly max 5 chars
+    // Example: "Brian" -> "BRI" + "45" = "BRI45"
+    // Example: "Ty" -> "TY" + "45" = "TY45"
+    document.getElementById('jUser').value = (prefix + rand).substring(0, 5);
+
+    // Generate Password (unchanged)
+    document.getElementById('jPass').value = Math.random().toString(36).slice(-5).toUpperCase(); 
+}
+
+async function addJudge() {
+    const btn = document.getElementById('btnAddJudge');
+    
+    // 1. Capture Data
+    const data = { 
+        name: document.getElementById('jName').value, 
+        username: document.getElementById('jUser').value, 
+        password: document.getElementById('jPass').value, 
+        category: document.getElementById('jCat').value 
+    };
+
+    if(!data.name || !data.category || data.category === "") { 
+        return alert("Please enter Full Name and select a Category."); 
+    }
+
+    btn.innerHTML = `<i class="ph ph-spinner animate-spin"></i> Adding...`; 
+    btn.disabled = true;
+
+    // --- OPTIMISTIC UPDATE: UPDATE UI IMMEDIATELY ---
+
+    // 2. Add to Global Array (matches your table structure)
+    JUDGES.push({
+        name: data.name,
+        category: data.category,
+        username: data.username,
+        password: data.password,
+        status: 'Active', // Default to Active so it shows green immediately
+        progress: 0
+    });
+
+    // 3. Re-render Table Instantly
+    renderJudges();
+
+    // 4. Clear Inputs (So you can add the next one)
+    document.getElementById('jName').value = ""; 
+    document.getElementById('jUser').value = ""; 
+    document.getElementById('jPass').value = ""; 
+    // document.getElementById('jCat').value = ""; // Optional: keep category if adding multiple to same
+
+    // --- END OPTIMISTIC UPDATE ---
+
+    // 5. Send to Server (Background)
+    await fetch(API_URL, { 
+        method: 'POST', 
+        mode: 'no-cors', 
+        body: JSON.stringify({ action: "addJudge", data: data }) 
+    });
+
+    // 6. Clear Server Cache (Silent)
+    if (typeof clearSystemCache === 'function') clearSystemCache();
+
+    // NOTE: We do NOT call loadData() here.
+    // This prevents the table from "blinking" or reverting if the server is slow.
+
+    btn.innerHTML = `<i class="ph ph-check-circle text-lg"></i> Account Created!`; 
+    setTimeout(() => { 
+        btn.innerHTML = `<i class="ph ph-check-circle text-lg"></i> Create Account`; 
+        btn.disabled = false; 
+    }, 2000);
+}
 
         function renderJudges() { 
             const tb = document.getElementById('judgeTableBody'); tb.innerHTML = ""; document.getElementById('judgeCountBadge').innerText = `${JUDGES.length} Total`; 
@@ -3161,8 +3272,56 @@ async function loadGraph() {
             }); 
         }
         
-        async function toggleJudge(u, b) { await fetch(API_URL, { method: 'POST', mode: 'no-cors', body: JSON.stringify({ action: "toggleJudge", data: { username: u, block: b } }) }); loadData(); }
-        async function deleteJudge(u) { if(!confirm("Permanently delete this judge? This cannot be undone.")) return; showLoader("Deleting..."); await fetch(API_URL, { method: 'POST', mode: 'no-cors', body: JSON.stringify({ action: "deleteJudge", data: { username: u } }) }); await loadData(); hideLoader(); }
+        async function toggleJudge(username, currentIsActive) {
+    // 1. OPTIMISTIC UPDATE: Find the judge and flip status locally
+    const judge = JUDGES.find(j => j.username === username);
+    if (judge) {
+        // If currently Active, switch to Blocked. If Blocked, switch to Active.
+        judge.status = currentIsActive ? 'Blocked' : 'Active';
+        
+        // Redraw the table immediately so the user sees the change
+        renderJudges(); 
+    }
+
+    // 2. Show a temporary success message (Optional)
+    // You can use a custom toast, or just rely on the visual table change.
+    // console.log("Status updated locally.");
+
+    // 3. Send the request to Server (Background)
+    await fetch(API_URL, { 
+        method: 'POST', 
+        mode: 'no-cors', 
+        body: JSON.stringify({ action: "toggleJudge", data: { username: username, block: currentIsActive } }) 
+    });
+
+    // NOTE: We DO NOT call loadData() here because it might bring back old cached data.
+    // The local update is sufficient for the current session.
+}
+async function deleteJudge(username) {
+    if(!confirm("Permanently delete this judge? This cannot be undone.")) return;
+
+    showLoader("Deleting...");
+
+    // 1. OPTIMISTIC UPDATE: Remove judge from local list immediately
+    // Filter out the judge with the matching username
+    JUDGES = JUDGES.filter(j => j.username !== username);
+    
+    // Redraw table immediately
+    renderJudges();
+
+    // 2. Hide Loader & Show Success
+    hideLoader();
+    alert("Judge deleted successfully."); // Immediate feedback for the user
+
+    // 3. Send Request to Server (Background)
+    await fetch(API_URL, { 
+        method: 'POST', 
+        mode: 'no-cors', 
+        body: JSON.stringify({ action: "deleteJudge", data: { username: username } }) 
+    });
+    
+    // NOTE: Again, we skip loadData() to prevent the old "ghost" judge from reappearing due to cache.
+}
 
         // --- PDF CREDENTIALS (LARGE FONTS) ---
 function generateCredentialsPDF() {
