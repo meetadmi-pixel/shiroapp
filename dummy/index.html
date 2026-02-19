@@ -96,7 +96,7 @@
             <div class="inline-block p-1 rounded-2xl bg-white shadow-xl mb-6">
                 <img src="https://i.postimg.cc/mgfGYYGq/download-34.jpg" alt="Logo" class="h-24 w-24 object-cover rounded-xl">
             </div>
-            <h1 class="text-4xl md:text-5xl font-extrabold text-slate-900 mb-2">KSEF DUMMY ONLINE JUDGING APP</h1>
+            <h1 class="text-4xl md:text-5xl font-extrabold text-slate-900 mb-2">KSEF DUMMY 2026 ONLINE JUDGING APP</h1>
             <p class="text-slate-500 font-medium">Select your role to access the portal</p>
         </div>
 
@@ -822,18 +822,48 @@ function loadLib(url) {
                     type: STATE.pendingUpload.type
                 }
             });
-            if(res.success) {
-                if(STATE.pendingUpload.type === 'manual') {
-                    Swal.fire('Success', `Project ${res.projects[0].name} Added. ID: ${res.projects[0].id}`, 'success');
-                    // Clear Manual Form
-                    ['m-grade','m-category','m-name','m-school','m-level','m-std1','m-std2'].forEach(id => document.getElementById(id).value = '');
-                } else { 
-                    generatePDF(res.projects); 
-                    Swal.fire('Success', `${res.projects.length} Uploaded. PDF Downloaded.`, 'success'); 
-                    document.getElementById('excel-editor').classList.add('hidden'); 
-                    if(adminPassInput) adminPassInput.value = '';
-                }
-            } else {
+           if (res.success) {
+    if (STATE.pendingUpload.type === 'manual') {
+        const projectID = res.projects[0].id;
+        const projectName = res.projects[0].name;
+
+        // 1. Initial Success Notification
+        await Swal.fire({
+            title: 'Project Added!',
+            html: `Project: <b>${projectName}</b><br>ID: <span style="color: #d33; font-size: 1.2em;">${projectID}</span>`,
+            icon: 'success',
+            confirmButtonText: 'Next: Confirm ID'
+        });
+
+        // 2. The "Strict" Verification Step
+        const { value: confirmed } = await Swal.fire({
+            title: 'Security Verification',
+            text: `Please confirm: Have you recorded the Project ID: ${projectID}?`,
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#3085d6',
+            cancelButtonColor: '#d33',
+            confirmButtonText: 'Yes, I have saved it!',
+            cancelButtonText: 'No, let me copy it'
+        });
+
+        if (confirmed) {
+            // Clear Manual Form only after they confirm they have the ID
+            ['m-grade', 'm-category', 'm-name', 'm-school', 'm-level', 'm-std1', 'm-std2'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.value = '';
+            });
+            Swal.fire('Confirmed', 'Form has been reset.', 'success');
+        }
+
+    } else { 
+        // Logic for Bulk Upload remains the same
+        generatePDF(res.projects); 
+        Swal.fire('Success', `${res.projects.length} Uploaded. PDF Downloaded.`, 'success'); 
+        document.getElementById('excel-editor').classList.add('hidden'); 
+        if (adminPassInput) adminPassInput.value = '';
+    }
+} else {
                 Swal.fire('Error', res.error, 'error');
             }
         } catch(e) { Swal.fire('Error', 'Submission Failed', 'error'); } 
